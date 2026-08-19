@@ -1,4 +1,4 @@
-name: Debug JPX Option Data
+name: Update JPX Option Data
 
 on:
 
@@ -12,9 +12,13 @@ on:
 
 jobs:
 
-  debug-qri:
+  update-option-data:
 
     runs-on: ubuntu-latest
+
+    # GitHubへpushするために必要
+    permissions:
+      contents: write
 
     steps:
 
@@ -24,6 +28,8 @@ jobs:
 
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
 
       # ==========================================
@@ -47,9 +53,168 @@ jobs:
 
 
       # ==========================================
-      # QRIアクセスデバッグ
+      # QRIデータ取得
       # ==========================================
 
-      - name: Run QRI debug
+      - name: Run QRI data collector
         run: |
           python get_option_data.py
+
+
+      # ==========================================
+      # Data確認
+      # ==========================================
+
+      - name: Check generated files
+        run: |
+          echo "========================================"
+          echo "Generated data files"
+          echo "========================================"
+
+          if [ -d "data" ]; then
+            find data -type f -maxdepth 3 -print
+          else
+            echo "ERROR: data directory was not created"
+            exit 1
+          fi
+
+          echo ""
+          echo "========================================"
+          echo "Data directory"
+          echo "========================================"
+
+          ls -lah data/
+
+          echo ""
+          echo "========================================"
+          echo "History directory"
+          echo "========================================"
+
+          if [ -d "data/history" ]; then
+            ls -lah data/history/
+          else
+            echo "History directory does not exist"
+          fi
+
+
+      # ==========================================
+      # Git設定
+      # ==========================================
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+
+      # ==========================================
+      # DataをGitへ追加
+      # ==========================================
+
+      - name: Commit and push data
+        run: |
+
+          echo "========================================"
+          echo "Git status before commit"
+          echo "========================================"
+
+          git status --short
+
+          echo ""
+          echo "========================================"
+          echo "Adding data files"
+          echo "========================================"
+
+          git add data/
+
+          echo ""
+          echo "========================================"
+          echo "Staged changes"
+          echo "========================================"
+
+          git status --short
+
+          # ========================================
+          # 変更がなければ終了
+          # ========================================
+
+          if git diff --cached --quiet; then
+
+            echo ""
+            echo "========================================"
+            echo "No data changes"
+            echo "========================================"
+
+            exit 0
+
+          fi
+
+          # ========================================
+          # Commit
+          # ========================================
+
+          echo ""
+          echo "========================================"
+          echo "Commit"
+          echo "========================================"
+
+          git commit -m "Update JPX option data"
+
+
+          # ========================================
+          # 最新のmainを取得
+          # ========================================
+
+          echo ""
+          echo "========================================"
+          echo "Pull latest main"
+          echo "========================================"
+
+          git pull --rebase origin main
+
+
+          # ========================================
+          # Push
+          # ========================================
+
+          echo ""
+          echo "========================================"
+          echo "Push to GitHub"
+          echo "========================================"
+
+          git push origin HEAD:main
+
+
+      # ==========================================
+      # 最終確認
+      # ==========================================
+
+      - name: Final summary
+        run: |
+
+          echo ""
+          echo "========================================"
+          echo "FINAL SUMMARY"
+          echo "========================================"
+
+          echo "Repository:"
+          git remote get-url origin
+
+          echo ""
+          echo "Latest data:"
+          if [ -f "data/latest.csv" ]; then
+            wc -l data/latest.csv
+          else
+            echo "data/latest.csv NOT FOUND"
+          fi
+
+          echo ""
+          echo "History files:"
+          if [ -d "data/history" ]; then
+            find data/history -type f -maxdepth 1 -print
+          else
+            echo "No history directory"
+          fi
+
+          echo ""
+          echo "========================================"
