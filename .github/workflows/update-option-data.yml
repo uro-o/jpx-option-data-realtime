@@ -1,31 +1,16 @@
 name: Update JPX Option Data
 
-
-# ============================================================
-# Trigger
-# ============================================================
-
 on:
 
-  # 手動実行
   workflow_dispatch:
 
-  # 月～金、24時間、1分ごと
   schedule:
     - cron: "* * * * 1-5"
 
 
-# ============================================================
-# GitHub Actions permissions
-# ============================================================
-
 permissions:
   contents: write
 
-
-# ============================================================
-# Job
-# ============================================================
 
 jobs:
 
@@ -37,7 +22,7 @@ jobs:
     steps:
 
       # ======================================================
-      # Checkout repository
+      # Checkout
       # ======================================================
 
       - name: Checkout repository
@@ -48,7 +33,7 @@ jobs:
 
 
       # ======================================================
-      # Setup Python
+      # Python
       # ======================================================
 
       - name: Setup Python
@@ -59,7 +44,7 @@ jobs:
 
 
       # ======================================================
-      # Install Python packages
+      # Dependencies
       # ======================================================
 
       - name: Install dependencies
@@ -71,14 +56,10 @@ jobs:
 
 
       # ======================================================
-      # Get JPX option data
+      # Get JPX data
       # ======================================================
 
       - name: Get JPX option data
-
-        env:
-          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-
         run: |
 
           echo "========================================"
@@ -89,12 +70,12 @@ jobs:
 
 
       # ======================================================
-      # Calculate differences
+      # Calculate differences + Discord
       # ======================================================
 
-      - name: Calculate differences
-
+      - name: Calculate differences and send Discord
         env:
+
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
 
         run: |
@@ -107,7 +88,7 @@ jobs:
 
 
       # ======================================================
-      # Check generated files
+      # Check files
       # ======================================================
 
       - name: Check data files
@@ -117,17 +98,7 @@ jobs:
           echo "DATA FILES"
           echo "========================================"
 
-          echo ""
-
-          if [ -d "data" ]; then
-
-            find data -maxdepth 2 -type f -print | sort
-
-          else
-
-            echo "data directory does not exist"
-
-          fi
+          find data -maxdepth 2 -type f -print | sort
 
           echo ""
 
@@ -149,18 +120,17 @@ jobs:
           echo "COMMIT AND PUSH"
           echo "========================================"
 
-          # Git user
-          git config user.name "github-actions[bot]"
+
+          git config user.name \
+            "github-actions[bot]"
 
           git config user.email \
             "41898282+github-actions[bot]@users.noreply.github.com"
 
 
-          # Add generated data
           git add data/
 
 
-          # Check whether there are changes
           if git diff --cached --quiet; then
 
             echo ""
@@ -177,11 +147,10 @@ jobs:
 
             echo ""
 
-            # Commit
-            git commit -m "Update JPX option data"
+            git commit \
+              -m "Update JPX option data"
 
 
-            # Push
             echo ""
             echo "Pushing to main..."
             echo ""
