@@ -9,7 +9,7 @@ from bs4 import BeautifulSoup
 
 
 # ============================================================
-# 設定
+# Configuration
 # ============================================================
 
 CONTRACTS = {
@@ -21,43 +21,25 @@ CONTRACTS = {
 DATA_DIR = Path("data")
 HISTORY_DIR = DATA_DIR / "history"
 
-DATA_DIR.mkdir(parents=True, exist_ok=True)
-HISTORY_DIR.mkdir(parents=True, exist_ok=True)
+DATA_DIR.mkdir(
+    parents=True,
+    exist_ok=True,
+)
+
+HISTORY_DIR.mkdir(
+    parents=True,
+    exist_ok=True,
+)
 
 LATEST_FILE = DATA_DIR / "latest.csv"
 
-JST = timezone(timedelta(hours=9))
+JST = timezone(
+    timedelta(hours=9)
+)
 
 
 # ============================================================
-# HTTP Session
-# ============================================================
-
-session = requests.Session()
-
-session.headers.update({
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/151.0.0.0 Safari/537.36"
-    ),
-    "Accept": (
-        "text/html,application/xhtml+xml,"
-        "application/xml;q=0.9,"
-        "image/avif,image/webp,"
-        "image/apng,*/*;q=0.8"
-    ),
-    "Accept-Language": (
-        "ja-JP,ja;q=0.9,en-US;q=0.8,en;q=0.7"
-    ),
-    "Accept-Encoding": "gzip, deflate, br",
-    "Connection": "keep-alive",
-    "Upgrade-Insecure-Requests": "1",
-})
-
-
-# ============================================================
-# CSV項目
+# CSV columns
 # ============================================================
 
 FIELDNAMES = [
@@ -86,7 +68,45 @@ FIELDNAMES = [
 
 
 # ============================================================
-# 文字列処理
+# HTTP Session
+# ============================================================
+
+session = requests.Session()
+
+session.headers.update({
+    "User-Agent": (
+        "Mozilla/5.0 "
+        "(Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 "
+        "(KHTML, like Gecko) "
+        "Chrome/151.0.0.0 "
+        "Safari/537.36"
+    ),
+
+    "Accept": (
+        "text/html,application/xhtml+xml,"
+        "application/xml;q=0.9,"
+        "image/avif,image/webp,"
+        "image/apng,*/*;q=0.8"
+    ),
+
+    "Accept-Language": (
+        "ja-JP,ja;q=0.9,"
+        "en-US;q=0.8,en;q=0.7"
+    ),
+
+    "Accept-Encoding": (
+        "gzip, deflate, br"
+    ),
+
+    "Connection": "keep-alive",
+
+    "Upgrade-Insecure-Requests": "1",
+})
+
+
+# ============================================================
+# Text cleanup
 # ============================================================
 
 def clean_text(text):
@@ -94,14 +114,22 @@ def clean_text(text):
     if text is None:
         return ""
 
-    text = text.replace("\xa0", " ")
-    text = re.sub(r"\s+", " ", text)
+    text = text.replace(
+        "\xa0",
+        " "
+    )
+
+    text = re.sub(
+        r"\s+",
+        " ",
+        text
+    )
 
     return text.strip()
 
 
 # ============================================================
-# 数値変換
+# Number conversion
 # ============================================================
 
 def to_number(text):
@@ -111,22 +139,30 @@ def to_number(text):
     if not text:
         return None
 
-    if text in [
+    if text in (
         "-",
         "--",
         "－",
         "―",
-    ]:
+    ):
         return None
 
-    text = text.replace(",", "")
-    text = text.replace("%", "")
+    text = text.replace(
+        ",",
+        ""
+    )
+
+    text = text.replace(
+        "%",
+        ""
+    )
 
     try:
 
         value = float(text)
 
         if value.is_integer():
+
             return int(value)
 
         return value
@@ -137,67 +173,177 @@ def to_number(text):
 
 
 # ============================================================
-# 現在値 + 時刻
+# Extract first numeric value from text
 # ============================================================
 
-def parse_price_and_time(text):
+def extract_number(text):
 
     text = clean_text(text)
 
     if not text:
-        return None, None
+        return None
 
-    parts = text.split()
-
-    if len(parts) >= 2:
-
-        price = to_number(parts[0])
-
-        trade_time = " ".join(
-            parts[1:]
-        )
-
-        return price, trade_time
-
-    return to_number(text), None
-
-
-# ============================================================
-# 気配値解析
-#
-# 例:
-#
-# 1 (77) - (-)
-#
-# ask_price       = 1
-# ask_quantity    = 77
-# bid_price       = -
-# bid_quantity    = -
-# ============================================================
-
-def parse_quote(text):
-
-    text = clean_text(text)
-
-    if not text or text == "-":
-        return (
-            None,
-            None,
-            None,
-            None,
-        )
-
-    pattern = (
-        r"(.+?)\s*\((.*?)\)\s*"
-        r"(.+?)\s*\((.*?)\)"
-    )
-
-    match = re.match(
-        pattern,
+    match = re.search(
+        r"-?[\d,]+(?:\.\d+)?",
         text,
     )
 
     if not match:
+        return None
+
+    return to_number(
+        match.group(0)
+    )
+
+
+# ============================================================
+# Price + time
+#
+# Example:
+#
+# 1
+# 08/18 22:07
+#
+# ============================================================
+
+def parse_price_and_time(
+    cell
+):
+
+    if cell is None:
+
+        return (
+            None,
+            None,
+        )
+
+    text = clean_text(
+        cell.get_text(
+            " ",
+            strip=True,
+        )
+    )
+
+    if not text:
+
+        return (
+            None,
+            None,
+        )
+
+    lines = [
+        clean_text(x)
+        for x in cell.stripped_strings
+    ]
+
+    lines = [
+        x for x in lines
+        if x
+    ]
+
+    # --------------------------------------------------------
+    # Price
+    # --------------------------------------------------------
+
+    price = None
+
+    if lines:
+
+        price = extract_number(
+            lines[0]
+        )
+
+    # --------------------------------------------------------
+    # Trade time
+    # --------------------------------------------------------
+
+    trade_time = None
+
+    for line in lines[1:]:
+
+        if re.search(
+            r"\d{1,2}/\d{1,2}",
+            line,
+        ):
+
+            trade_time = line
+
+            break
+
+    return (
+        price,
+        trade_time,
+    )
+
+
+# ============================================================
+# Two values
+#
+# Example:
+#
+# 38.20% -
+#
+# ============================================================
+
+def parse_two_values(
+    cell
+):
+
+    if cell is None:
+
+        return (
+            None,
+            None,
+        )
+
+    lines = [
+        clean_text(x)
+        for x in cell.stripped_strings
+    ]
+
+    lines = [
+        x for x in lines
+        if x
+    ]
+
+    first = (
+        extract_number(lines[0])
+        if len(lines) >= 1
+        else None
+    )
+
+    second = (
+        extract_number(lines[1])
+        if len(lines) >= 2
+        else None
+    )
+
+    return (
+        first,
+        second,
+    )
+
+
+# ============================================================
+# Quote parser
+#
+# Example:
+#
+# 1 (77)
+# -
+#
+# or:
+#
+# 1 (77)
+# - (-)
+#
+# ============================================================
+
+def parse_quote(
+    cell
+):
+
+    if cell is None:
 
         return (
             None,
@@ -206,21 +352,67 @@ def parse_quote(text):
             None,
         )
 
-    ask_price = to_number(
-        match.group(1)
-    )
+    lines = [
+        clean_text(x)
+        for x in cell.stripped_strings
+    ]
 
-    ask_quantity = to_number(
-        match.group(2)
-    )
+    lines = [
+        x for x in lines
+        if x
+    ]
 
-    bid_price = to_number(
-        match.group(3)
-    )
+    ask_price = None
+    ask_quantity = None
 
-    bid_quantity = to_number(
-        match.group(4)
-    )
+    bid_price = None
+    bid_quantity = None
+
+    if len(lines) >= 1:
+
+        match = re.search(
+            r"(.+?)\s*\((.*?)\)",
+            lines[0],
+        )
+
+        if match:
+
+            ask_price = extract_number(
+                match.group(1)
+            )
+
+            ask_quantity = extract_number(
+                match.group(2)
+            )
+
+        else:
+
+            ask_price = extract_number(
+                lines[0]
+            )
+
+    if len(lines) >= 2:
+
+        match = re.search(
+            r"(.+?)\s*\((.*?)\)",
+            lines[1],
+        )
+
+        if match:
+
+            bid_price = extract_number(
+                match.group(1)
+            )
+
+            bid_quantity = extract_number(
+                match.group(2)
+            )
+
+        else:
+
+            bid_price = extract_number(
+                lines[1]
+            )
 
     return (
         ask_price,
@@ -231,43 +423,16 @@ def parse_quote(text):
 
 
 # ============================================================
-# 2つの値を解析
+# Fetch QRI HTML
 #
-# 例:
-# 38.20% -
+# IMPORTANT:
+# Do NOT access https://svc.qri.jp/
+# Directly access option pages.
 # ============================================================
 
-def parse_two_values(text):
-
-    parts = clean_text(
-        text
-    ).split()
-
-    first = (
-        to_number(parts[0])
-        if len(parts) >= 1
-        else None
-    )
-
-    second = (
-        to_number(parts[1])
-        if len(parts) >= 2
-        else None
-    )
-
-    return first, second
-
-
-# ============================================================
-# QRI HTML取得
-#
-# ルートURLにはアクセスしない
-# 各限月ページへ直接アクセス
-#
-# 503 / 502 / 500 / 504 / 429 はリトライ
-# ============================================================
-
-def fetch_html(url):
+def fetch_html(
+    url
+):
 
     print()
     print(
@@ -298,18 +463,17 @@ def fetch_html(url):
             )
 
             # ------------------------------------------------
-            # 成功
+            # Success
             # ------------------------------------------------
 
             if response.status_code == 200:
 
-                # QRIはUTF-8
                 response.encoding = "utf-8"
 
                 return response.text
 
             # ------------------------------------------------
-            # 一時的なエラー
+            # Retryable errors
             # ------------------------------------------------
 
             if response.status_code in (
@@ -321,7 +485,8 @@ def fetch_html(url):
             ):
 
                 last_error = (
-                    f"HTTP {response.status_code}"
+                    f"HTTP "
+                    f"{response.status_code}"
                 )
 
                 print(
@@ -337,7 +502,8 @@ def fetch_html(url):
 
                     print(
                         f"[WAIT] "
-                        f"{wait_seconds} seconds"
+                        f"{wait_seconds} "
+                        f"seconds"
                     )
 
                     time.sleep(
@@ -349,7 +515,7 @@ def fetch_html(url):
                 break
 
             # ------------------------------------------------
-            # その他
+            # Other HTTP errors
             # ------------------------------------------------
 
             response.raise_for_status()
@@ -360,7 +526,8 @@ def fetch_html(url):
 
             print(
                 f"[ERROR] "
-                f"attempt={attempt}: {e}"
+                f"attempt={attempt}: "
+                f"{e}"
             )
 
             if attempt < 3:
@@ -371,7 +538,8 @@ def fetch_html(url):
 
                 print(
                     f"[WAIT] "
-                    f"{wait_seconds} seconds"
+                    f"{wait_seconds} "
+                    f"seconds"
                 )
 
                 time.sleep(
@@ -386,10 +554,12 @@ def fetch_html(url):
 
 
 # ============================================================
-# QRI更新時刻
+# QRI update time
 # ============================================================
 
-def get_qri_update_time(soup):
+def get_qri_update_time(
+    soup
+):
 
     element = soup.select_one(
         ".update-time dd"
@@ -410,10 +580,12 @@ def get_qri_update_time(soup):
 
 
 # ============================================================
-# 取引日・取引最終日
+# Trading day / Last trading day
 # ============================================================
 
-def get_contract_info(soup):
+def get_contract_info(
+    soup
+):
 
     trading_day = ""
     last_trading_day = ""
@@ -424,10 +596,16 @@ def get_contract_info(soup):
 
     for area in areas:
 
-        dt = area.select_one("dt")
-        dd = area.select_one("dd")
+        dt = area.select_one(
+            "dt"
+        )
+
+        dd = area.select_one(
+            "dd"
+        )
 
         if not dt or not dd:
+
             continue
 
         label = clean_text(
@@ -459,7 +637,7 @@ def get_contract_info(soup):
 
 
 # ============================================================
-# オプションテーブル解析
+# Parse option table
 # ============================================================
 
 def parse_option_table(
@@ -519,11 +697,12 @@ def parse_option_table(
             [],
         )
 
-        # -----------------------------------------------
-        # Greek行を除外
-        # -----------------------------------------------
+        # ----------------------------------------------------
+        # Greek rows
+        # ----------------------------------------------------
 
         if "greek" in classes:
+
             continue
 
         cells = row.find_all(
@@ -531,44 +710,68 @@ def parse_option_table(
             recursive=False,
         )
 
-        # -----------------------------------------------
-        # 通常の価格行は17列
-        # -----------------------------------------------
+        # ----------------------------------------------------
+        # Normal option rows
+        #
+        # QRI currently has 17 cells.
+        # Accept 17 or more for robustness.
+        # ----------------------------------------------------
 
-        if len(cells) != 17:
+        if len(cells) < 17:
+
             continue
 
-        values = [
-            clean_text(
-                cell.get_text(
-                    " ",
-                    strip=True,
-                )
-            )
-            for cell in cells
-        ]
-
-        # =================================================
+        # ====================================================
         # CALL
-        # =================================================
+        # ====================================================
 
-        call_settlement = to_number(
-            values[0]
-        )
+        # ----------------------------------------------------
+        # 0 Settlement
+        # ----------------------------------------------------
 
-        call_oi = to_number(
-            values[1]
-        )
-
-        call_volume = to_number(
-            values[2]
-        )
-
-        call_ask_iv, call_bid_iv = (
-            parse_two_values(
-                values[3]
+        call_settlement = extract_number(
+            cells[0].get_text(
+                " ",
+                strip=True,
             )
         )
+
+        # ----------------------------------------------------
+        # 1 Open Interest
+        # ----------------------------------------------------
+
+        call_oi = extract_number(
+            cells[1].get_text(
+                " ",
+                strip=True,
+            )
+        )
+
+        # ----------------------------------------------------
+        # 2 Volume
+        # ----------------------------------------------------
+
+        call_volume = extract_number(
+            cells[2].get_text(
+                " ",
+                strip=True,
+            )
+        )
+
+        # ----------------------------------------------------
+        # 3 Ask IV / Bid IV
+        # ----------------------------------------------------
+
+        (
+            call_ask_iv,
+            call_bid_iv,
+        ) = parse_two_values(
+            cells[3]
+        )
+
+        # ----------------------------------------------------
+        # 4 Ask/Bid quote
+        # ----------------------------------------------------
 
         (
             call_ask_price,
@@ -576,85 +779,129 @@ def parse_option_table(
             call_bid_price,
             call_bid_quantity,
         ) = parse_quote(
-            values[4]
+            cells[4]
         )
 
-        call_iv = to_number(
-            values[5]
-        )
+        # ----------------------------------------------------
+        # 5 IV
+        # ----------------------------------------------------
 
-        call_change_parts = (
-            values[6].split()
-        )
-
-        call_change = (
-            to_number(
-                call_change_parts[0]
+        call_iv = extract_number(
+            cells[5].get_text(
+                " ",
+                strip=True,
             )
-            if len(call_change_parts) >= 1
-            else None
         )
 
-        call_change_percent = (
-            to_number(
-                call_change_parts[1]
-            )
-            if len(call_change_parts) >= 2
-            else None
+        # ----------------------------------------------------
+        # 6 Change
+        #
+        # Example:
+        #
+        # 0
+        # 0.00%
+        # ----------------------------------------------------
+
+        (
+            call_change,
+            call_change_percent,
+        ) = parse_two_values(
+            cells[6]
         )
+
+        # ----------------------------------------------------
+        # 7 Last price
+        # ----------------------------------------------------
 
         (
             call_last_price,
             call_trade_time,
         ) = parse_price_and_time(
-            values[7]
+            cells[7]
         )
 
-        # =================================================
-        # Strike
-        # =================================================
+        # ====================================================
+        # STRIKE
+        #
+        # Important:
+        #
+        # QRI HTML:
+        #
+        # <td class="price">
+        #     90,000
+        #     <button>
+        #         リスク指標
+        #     </button>
+        # </td>
+        #
+        # Therefore do NOT simply convert the entire cell.
+        # Extract the first number only.
+        # ====================================================
+
+        strike_text = clean_text(
+            cells[8].get_text(
+                " ",
+                strip=True,
+            )
+        )
+
+        strike_match = re.search(
+            r"[\d,]+(?:\.\d+)?",
+            strike_text,
+        )
+
+        if not strike_match:
+
+            continue
 
         strike = to_number(
-            values[8]
+            strike_match.group(0)
         )
 
         if strike is None:
+
             continue
 
-        # =================================================
+        # ====================================================
         # PUT
-        # =================================================
+        # ====================================================
+
+        # ----------------------------------------------------
+        # 9 Last price
+        # ----------------------------------------------------
 
         (
             put_last_price,
             put_trade_time,
         ) = parse_price_and_time(
-            values[9]
+            cells[9]
         )
 
-        put_change_parts = (
-            values[10].split()
+        # ----------------------------------------------------
+        # 10 Change
+        # ----------------------------------------------------
+
+        (
+            put_change,
+            put_change_percent,
+        ) = parse_two_values(
+            cells[10]
         )
 
-        put_change = (
-            to_number(
-                put_change_parts[0]
+        # ----------------------------------------------------
+        # 11 IV
+        # ----------------------------------------------------
+
+        put_iv = extract_number(
+            cells[11].get_text(
+                " ",
+                strip=True,
             )
-            if len(put_change_parts) >= 1
-            else None
         )
 
-        put_change_percent = (
-            to_number(
-                put_change_parts[1]
-            )
-            if len(put_change_parts) >= 2
-            else None
-        )
-
-        put_iv = to_number(
-            values[11]
-        )
+        # ----------------------------------------------------
+        # 12 Ask/Bid quote
+        # ----------------------------------------------------
 
         (
             put_ask_price,
@@ -662,30 +909,56 @@ def parse_option_table(
             put_bid_price,
             put_bid_quantity,
         ) = parse_quote(
-            values[12]
+            cells[12]
         )
 
-        put_ask_iv, put_bid_iv = (
-            parse_two_values(
-                values[13]
+        # ----------------------------------------------------
+        # 13 Ask IV / Bid IV
+        # ----------------------------------------------------
+
+        (
+            put_ask_iv,
+            put_bid_iv,
+        ) = parse_two_values(
+            cells[13]
+        )
+
+        # ----------------------------------------------------
+        # 14 Volume
+        # ----------------------------------------------------
+
+        put_volume = extract_number(
+            cells[14].get_text(
+                " ",
+                strip=True,
             )
         )
 
-        put_volume = to_number(
-            values[14]
+        # ----------------------------------------------------
+        # 15 Open Interest
+        # ----------------------------------------------------
+
+        put_oi = extract_number(
+            cells[15].get_text(
+                " ",
+                strip=True,
+            )
         )
 
-        put_oi = to_number(
-            values[15]
+        # ----------------------------------------------------
+        # 16 Settlement
+        # ----------------------------------------------------
+
+        put_settlement = extract_number(
+            cells[16].get_text(
+                " ",
+                strip=True,
+            )
         )
 
-        put_settlement = to_number(
-            values[16]
-        )
-
-        # =================================================
-        # CALLレコード
-        # =================================================
+        # ====================================================
+        # CALL record
+        # ====================================================
 
         call_record = {
 
@@ -757,9 +1030,9 @@ def parse_option_table(
             call_record
         )
 
-        # =================================================
-        # PUTレコード
-        # =================================================
+        # ====================================================
+        # PUT record
+        # ====================================================
 
         put_record = {
 
@@ -835,7 +1108,7 @@ def parse_option_table(
 
 
 # ============================================================
-# 1限月取得
+# Get one contract
 # ============================================================
 
 def get_contract_data(
@@ -854,7 +1127,7 @@ def get_contract_data(
     )
 
     # --------------------------------------------------------
-    # TITLE確認
+    # Title
     # --------------------------------------------------------
 
     title = clean_text(
@@ -864,12 +1137,11 @@ def get_contract_data(
     )
 
     print(
-        f"[TITLE] "
-        f"{title}"
+        f"[TITLE] {title}"
     )
 
     # --------------------------------------------------------
-    # QRI更新時刻
+    # QRI update time
     # --------------------------------------------------------
 
     qri_update_time = (
@@ -884,7 +1156,7 @@ def get_contract_data(
     )
 
     # --------------------------------------------------------
-    # 取引日
+    # Trading day
     # --------------------------------------------------------
 
     (
@@ -905,7 +1177,7 @@ def get_contract_data(
     )
 
     # --------------------------------------------------------
-    # オプションデータ
+    # Option data
     # --------------------------------------------------------
 
     records = parse_option_table(
@@ -930,7 +1202,7 @@ def get_contract_data(
 
 
 # ============================================================
-# latest.csv読み込み
+# Load latest.csv
 # ============================================================
 
 def load_latest():
@@ -964,10 +1236,12 @@ def load_latest():
 
 
 # ============================================================
-# latest.csv保存
+# Save latest.csv
 # ============================================================
 
-def save_latest(records):
+def save_latest(
+    records
+):
 
     if not records:
 
@@ -1001,7 +1275,7 @@ def save_latest(records):
 
 
 # ============================================================
-# 前回のQRI更新時刻
+# Get previous update times
 # ============================================================
 
 def get_previous_update_times(
@@ -1030,7 +1304,7 @@ def get_previous_update_times(
 
 
 # ============================================================
-# 履歴ファイル
+# History file
 # ============================================================
 
 def get_history_file(
@@ -1067,7 +1341,7 @@ def get_history_file(
 
 
 # ============================================================
-# 履歴保存
+# Save history
 # ============================================================
 
 def save_history(
@@ -1085,11 +1359,11 @@ def save_history(
         )
     )
 
-    # --------------------------------------------------------
-    # 既存ファイルから重複チェック
-    # --------------------------------------------------------
-
     existing_keys = set()
+
+    # --------------------------------------------------------
+    # Read existing history
+    # --------------------------------------------------------
 
     if history_file.exists():
 
@@ -1140,7 +1414,7 @@ def save_history(
             )
 
     # --------------------------------------------------------
-    # 新規レコードのみ
+    # Remove duplicates
     # --------------------------------------------------------
 
     new_records = []
@@ -1215,7 +1489,7 @@ def save_history(
 
 
 # ============================================================
-# メイン
+# Main
 # ============================================================
 
 def main():
@@ -1251,7 +1525,7 @@ def main():
     )
 
     # ========================================================
-    # 前回データ
+    # Load previous latest data
     # ========================================================
 
     previous_records = (
@@ -1265,7 +1539,7 @@ def main():
     )
 
     # ========================================================
-    # 全限月取得
+    # Get all contracts
     # ========================================================
 
     all_records = []
@@ -1304,7 +1578,7 @@ def main():
             )
 
     # ========================================================
-    # データ取得失敗
+    # No data
     # ========================================================
 
     if not all_records:
@@ -1314,7 +1588,7 @@ def main():
         )
 
     # ========================================================
-    # 更新確認
+    # Check QRI update times
     # ========================================================
 
     new_records = []
@@ -1341,8 +1615,7 @@ def main():
         )
 
         print(
-            f"[CHECK] "
-            f"{contract}"
+            f"[CHECK] {contract}"
         )
 
         print(
@@ -1356,7 +1629,7 @@ def main():
         )
 
         # ----------------------------------------------------
-        # 初回または更新
+        # New QRI data
         # ----------------------------------------------------
 
         if (
@@ -1366,8 +1639,7 @@ def main():
         ):
 
             print(
-                f"[NEW] "
-                f"{contract}"
+                f"[NEW] {contract}"
             )
 
             for record in all_records:
@@ -1391,9 +1663,7 @@ def main():
             )
 
     # ========================================================
-    # latest.csv
-    #
-    # 常に最新状態を保存
+    # Save latest
     # ========================================================
 
     save_latest(
@@ -1401,16 +1671,10 @@ def main():
     )
 
     # ========================================================
-    # history
-    #
-    # QRI更新時刻が変わった場合だけ保存
+    # Save history
     # ========================================================
 
     if new_records:
-
-        # ----------------------------------------------------
-        # 取引日
-        # ----------------------------------------------------
 
         trading_day = (
             new_records[0].get(
@@ -1436,6 +1700,7 @@ def main():
 
         print(
             "========================================"
+
         )
 
     else:
@@ -1454,16 +1719,18 @@ def main():
         )
 
     # ========================================================
-    # サマリー
+    # Summary
     # ========================================================
 
     print()
     print(
         "========================================"
     )
+
     print(
         "SUMMARY"
     )
+
     print(
         "========================================"
     )
@@ -1489,7 +1756,7 @@ def main():
 
 
 # ============================================================
-# Entry Point
+# Entry point
 # ============================================================
 
 if __name__ == "__main__":
