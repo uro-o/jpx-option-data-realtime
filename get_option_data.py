@@ -36,7 +36,6 @@ HISTORY_DIR.mkdir(
 
 
 LATEST_FILE = DATA_DIR / "latest.csv"
-
 DIFFERENCES_FILE = DATA_DIR / "differences.csv"
 
 
@@ -59,33 +58,22 @@ DISCORD_WEBHOOK_URL = os.environ.get(
 # Alert settings
 # ============================================================
 
-# 取引高の増加
+# 1回の更新で出来高がこの数量以上増加したら通知
 VOLUME_THRESHOLD = 100
 
-# 建玉増加
+# 建玉残がこの数量以上増加したら通知
 OI_INCREASE_THRESHOLD = 100
 
-# 建玉減少
+# 建玉残がこの数量以上減少したら通知
 OI_DECREASE_THRESHOLD = 100
 
-# 最終価格変化
+# 最終価格がこの金額以上変化したら通知
 PRICE_CHANGE_THRESHOLD = 100
 
-# Ask数量変化
-ASK_QUANTITY_THRESHOLD = 100
-
-# Bid数量変化
-BID_QUANTITY_THRESHOLD = 100
-
-
-# ============================================================
-# Discord settings
-# ============================================================
-
-# 1回の実行で最大何件通知するか
+# 1回の実行でDiscordへ送る最大件数
 MAX_DISCORD_ALERTS = 20
 
-# Discordへの連続送信間隔
+# Discord連続送信間隔
 DISCORD_INTERVAL = 0.5
 
 
@@ -117,6 +105,10 @@ FIELDNAMES = [
     "trade_time",
 ]
 
+
+# ============================================================
+# Difference columns
+# ============================================================
 
 DIFFERENCE_FIELDS = [
     "qri_update_time",
@@ -249,32 +241,9 @@ def to_number(text):
 
         return value
 
-    except (ValueError, TypeError):
+    except ValueError:
 
         return None
-
-
-# ============================================================
-# Numeric helper
-# ============================================================
-
-def number(value):
-
-    if value is None:
-        return 0
-
-    if value == "":
-        return 0
-
-    try:
-
-        return float(
-            str(value).replace(",", "")
-        )
-
-    except Exception:
-
-        return 0
 
 
 # ============================================================
@@ -334,7 +303,8 @@ def parse_price_and_time(cell):
     ]
 
     lines = [
-        x for x in lines
+        x
+        for x in lines
         if x
     ]
 
@@ -366,7 +336,7 @@ def parse_price_and_time(cell):
 
 
 # ============================================================
-# Two values
+# Parse two values
 # ============================================================
 
 def parse_two_values(cell):
@@ -384,7 +354,8 @@ def parse_two_values(cell):
     ]
 
     lines = [
-        x for x in lines
+        x
+        for x in lines
         if x
     ]
 
@@ -427,7 +398,8 @@ def parse_quote(cell):
     ]
 
     lines = [
-        x for x in lines
+        x
+        for x in lines
         if x
     ]
 
@@ -437,6 +409,7 @@ def parse_quote(cell):
     bid_price = None
     bid_quantity = None
 
+    # ASK
     if len(lines) >= 1:
 
         match = re.search(
@@ -460,6 +433,7 @@ def parse_quote(cell):
                 lines[0]
             )
 
+    # BID
     if len(lines) >= 2:
 
         match = re.search(
@@ -545,7 +519,8 @@ def fetch_html(url):
                 )
 
                 print(
-                    f"[RETRY] {last_error}"
+                    f"[RETRY] "
+                    f"{last_error}"
                 )
 
                 if attempt < 3:
@@ -566,7 +541,8 @@ def fetch_html(url):
 
             print(
                 f"[ERROR] "
-                f"attempt={attempt}: {e}"
+                f"attempt={attempt}: "
+                f"{e}"
             )
 
             if attempt < 3:
@@ -718,9 +694,9 @@ def parse_option_table(
         if len(cells) < 17:
             continue
 
-        # ----------------------------------------------------
+        # ====================================================
         # CALL
-        # ----------------------------------------------------
+        # ====================================================
 
         call_settlement = extract_number(
             cells[0].get_text(
@@ -743,8 +719,10 @@ def parse_option_table(
             )
         )
 
-        call_ask_iv, call_bid_iv = parse_two_values(
-            cells[3]
+        call_ask_iv, call_bid_iv = (
+            parse_two_values(
+                cells[3]
+            )
         )
 
         (
@@ -763,17 +741,21 @@ def parse_option_table(
             )
         )
 
-        call_change, call_change_percent = parse_two_values(
-            cells[6]
+        call_change, call_change_percent = (
+            parse_two_values(
+                cells[6]
+            )
         )
 
-        call_last_price, call_trade_time = parse_price_and_time(
-            cells[7]
+        call_last_price, call_trade_time = (
+            parse_price_and_time(
+                cells[7]
+            )
         )
 
-        # ----------------------------------------------------
+        # ====================================================
         # STRIKE
-        # ----------------------------------------------------
+        # ====================================================
 
         strike_text = clean_text(
             cells[8].get_text(
@@ -797,16 +779,20 @@ def parse_option_table(
         if strike is None:
             continue
 
-        # ----------------------------------------------------
+        # ====================================================
         # PUT
-        # ----------------------------------------------------
+        # ====================================================
 
-        put_last_price, put_trade_time = parse_price_and_time(
-            cells[9]
+        put_last_price, put_trade_time = (
+            parse_price_and_time(
+                cells[9]
+            )
         )
 
-        put_change, put_change_percent = parse_two_values(
-            cells[10]
+        put_change, put_change_percent = (
+            parse_two_values(
+                cells[10]
+            )
         )
 
         put_iv = extract_number(
@@ -825,8 +811,10 @@ def parse_option_table(
             cells[12]
         )
 
-        put_ask_iv, put_bid_iv = parse_two_values(
-            cells[13]
+        put_ask_iv, put_bid_iv = (
+            parse_two_values(
+                cells[13]
+            )
         )
 
         put_volume = extract_number(
@@ -850,6 +838,10 @@ def parse_option_table(
             )
         )
 
+        # ====================================================
+        # Common
+        # ====================================================
+
         common = {
 
             "qri_update_time":
@@ -871,9 +863,9 @@ def parse_option_table(
                 strike,
         }
 
-        # ----------------------------------------------------
+        # ====================================================
         # CALL record
-        # ----------------------------------------------------
+        # ====================================================
 
         call_record = {
             **common,
@@ -924,9 +916,9 @@ def parse_option_table(
                 call_trade_time,
         }
 
-        # ----------------------------------------------------
+        # ====================================================
         # PUT record
-        # ----------------------------------------------------
+        # ====================================================
 
         put_record = {
             **common,
@@ -1070,7 +1062,6 @@ def get_contract_data(
 def load_csv(path):
 
     if not path.exists():
-
         return []
 
     try:
@@ -1121,10 +1112,7 @@ def save_latest(records):
         )
 
         writer.writeheader()
-
-        writer.writerows(
-            records
-        )
+        writer.writerows(records)
 
     print(
         f"[LATEST] "
@@ -1134,7 +1122,7 @@ def save_latest(records):
 
 
 # ============================================================
-# Get previous update times
+# Previous update times
 # ============================================================
 
 def get_previous_update_times(records):
@@ -1156,6 +1144,185 @@ def get_previous_update_times(records):
             result[contract] = update_time
 
     return result
+
+
+# ============================================================
+# History filename
+# ============================================================
+
+def get_history_file(trading_day):
+
+    match = re.search(
+        r"(\d{4})/(\d{2})/(\d{2})",
+        trading_day,
+    )
+
+    if match:
+
+        date_string = (
+            f"{match.group(1)}-"
+            f"{match.group(2)}-"
+            f"{match.group(3)}"
+        )
+
+    else:
+
+        date_string = datetime.now(
+            JST
+        ).strftime(
+            "%Y-%m-%d"
+        )
+
+    return (
+        HISTORY_DIR /
+        f"{date_string}.csv"
+    )
+
+
+# ============================================================
+# Save history
+# ============================================================
+
+def save_history(
+    records,
+    trading_day,
+):
+
+    if not records:
+        return
+
+    history_file = get_history_file(
+        trading_day
+    )
+
+    existing_keys = set()
+
+    if history_file.exists():
+
+        with open(
+            history_file,
+            "r",
+            encoding="utf-8-sig",
+            newline="",
+        ) as f:
+
+            reader = csv.DictReader(f)
+
+            for row in reader:
+
+                key = (
+                    row.get("contract", ""),
+                    row.get("option_type", ""),
+                    row.get("strike", ""),
+                    row.get("qri_update_time", ""),
+                )
+
+                existing_keys.add(
+                    key
+                )
+
+    new_records = []
+
+    for record in records:
+
+        key = (
+            record["contract"],
+            record["option_type"],
+            str(record["strike"]),
+            record["qri_update_time"],
+        )
+
+        if key not in existing_keys:
+
+            new_records.append(
+                record
+            )
+
+    if not new_records:
+
+        print(
+            "[HISTORY] No new records."
+        )
+
+        return
+
+    file_exists = history_file.exists()
+
+    with open(
+        history_file,
+        "a",
+        encoding="utf-8-sig",
+        newline="",
+    ) as f:
+
+        writer = csv.DictWriter(
+            f,
+            fieldnames=FIELDNAMES,
+        )
+
+        if not file_exists:
+
+            writer.writeheader()
+
+        writer.writerows(
+            new_records
+        )
+
+    print(
+        f"[HISTORY] "
+        f"{history_file} "
+        f"+{len(new_records)} records"
+    )
+
+
+# ============================================================
+# Numeric helper
+# ============================================================
+
+def number(value):
+
+    if value is None:
+        return 0
+
+    if value == "":
+        return 0
+
+    try:
+
+        return float(
+            str(value).replace(
+                ",",
+                ""
+            )
+        )
+
+    except Exception:
+
+        return 0
+
+
+# ============================================================
+# Format number
+# ============================================================
+
+def fmt(value):
+
+    if value is None:
+        return "-"
+
+    try:
+
+        value = float(value)
+
+        if value.is_integer():
+
+            return f"{int(value):,}"
+
+        return f"{value:,.2f}"
+
+    except Exception:
+
+        return str(value)
 
 
 # ============================================================
@@ -1188,47 +1355,52 @@ def calculate_differences(
         f"{len(previous_records)}"
     )
 
-    # --------------------------------------------------------
-    # 前回データをMAP化
-    # --------------------------------------------------------
-
     previous_map = {}
 
     for row in previous_records:
 
         key = (
-            row.get("contract", ""),
-            row.get("option_type", ""),
-            str(row.get("strike", "")),
+            row.get(
+                "contract",
+                ""
+            ),
+            row.get(
+                "option_type",
+                ""
+            ),
+            row.get(
+                "strike",
+                ""
+            ),
         )
 
         previous_map[key] = row
 
     differences = []
 
-    # --------------------------------------------------------
-    # 今回データとの比較
-    # --------------------------------------------------------
-
     for current in current_records:
 
         key = (
-            current.get("contract", ""),
-            current.get("option_type", ""),
-            str(current.get("strike", "")),
+            current.get(
+                "contract",
+                ""
+            ),
+            current.get(
+                "option_type",
+                ""
+            ),
+            current.get(
+                "strike",
+                ""
+            ),
         )
 
         previous = previous_map.get(
             key
         )
 
-        # 初回取得
         if previous is None:
             continue
-
-        # ----------------------------------------------------
-        # OI
-        # ----------------------------------------------------
 
         previous_oi = number(
             previous.get(
@@ -1242,15 +1414,6 @@ def calculate_differences(
             )
         )
 
-        oi_diff = (
-            current_oi -
-            previous_oi
-        )
-
-        # ----------------------------------------------------
-        # Volume
-        # ----------------------------------------------------
-
         previous_volume = number(
             previous.get(
                 "volume"
@@ -1262,15 +1425,6 @@ def calculate_differences(
                 "volume"
             )
         )
-
-        volume_diff = (
-            current_volume -
-            previous_volume
-        )
-
-        # ----------------------------------------------------
-        # Last price
-        # ----------------------------------------------------
 
         previous_price = number(
             previous.get(
@@ -1284,15 +1438,6 @@ def calculate_differences(
             )
         )
 
-        price_diff = (
-            current_price -
-            previous_price
-        )
-
-        # ----------------------------------------------------
-        # Ask quantity
-        # ----------------------------------------------------
-
         previous_ask_qty = number(
             previous.get(
                 "ask_quantity"
@@ -1304,15 +1449,6 @@ def calculate_differences(
                 "ask_quantity"
             )
         )
-
-        ask_qty_diff = (
-            current_ask_qty -
-            previous_ask_qty
-        )
-
-        # ----------------------------------------------------
-        # Bid quantity
-        # ----------------------------------------------------
 
         previous_bid_qty = number(
             previous.get(
@@ -1326,16 +1462,36 @@ def calculate_differences(
             )
         )
 
+        oi_diff = (
+            current_oi -
+            previous_oi
+        )
+
+        volume_diff = (
+            current_volume -
+            previous_volume
+        )
+
+        price_diff = (
+            current_price -
+            previous_price
+        )
+
+        ask_qty_diff = (
+            current_ask_qty -
+            previous_ask_qty
+        )
+
         bid_qty_diff = (
             current_bid_qty -
             previous_bid_qty
         )
 
-        # ----------------------------------------------------
-        # Alert classification
-        # ----------------------------------------------------
-
         alerts = []
+
+        # ====================================================
+        # Volume
+        # ====================================================
 
         if (
             volume_diff
@@ -1346,6 +1502,10 @@ def calculate_differences(
                 "VOLUME"
             )
 
+        # ====================================================
+        # OI increase
+        # ====================================================
+
         if (
             oi_diff
             >= OI_INCREASE_THRESHOLD
@@ -1354,6 +1514,10 @@ def calculate_differences(
             alerts.append(
                 "OI_INCREASE"
             )
+
+        # ====================================================
+        # OI decrease
+        # ====================================================
 
         if (
             oi_diff
@@ -1364,6 +1528,10 @@ def calculate_differences(
                 "OI_DECREASE"
             )
 
+        # ====================================================
+        # Price
+        # ====================================================
+
         if (
             abs(price_diff)
             >= PRICE_CHANGE_THRESHOLD
@@ -1373,31 +1541,9 @@ def calculate_differences(
                 "PRICE"
             )
 
-        if (
-            abs(ask_qty_diff)
-            >= ASK_QUANTITY_THRESHOLD
-        ):
-
-            alerts.append(
-                "ASK_QTY"
-            )
-
-        if (
-            abs(bid_qty_diff)
-            >= BID_QUANTITY_THRESHOLD
-        ):
-
-            alerts.append(
-                "BID_QTY"
-            )
-
         alert_type = ",".join(
             alerts
         )
-
-        # ----------------------------------------------------
-        # Difference record
-        # ----------------------------------------------------
 
         differences.append({
 
@@ -1496,6 +1642,15 @@ def save_differences(
     differences
 ):
 
+    if not differences:
+
+        print(
+            "[DIFFERENCE] "
+            "No difference records."
+        )
+
+        return
+
     with open(
         DIFFERENCES_FILE,
         "w",
@@ -1522,27 +1677,63 @@ def save_differences(
 
 
 # ============================================================
-# Format number
+# Discord webhook
 # ============================================================
 
-def fmt(value):
+def send_discord_message(
+    message
+):
 
-    if value is None:
-        return "-"
+    if not DISCORD_WEBHOOK_URL:
+
+        print(
+            "[DISCORD] ERROR: "
+            "DISCORD_WEBHOOK_URL is not set."
+        )
+
+        return False
 
     try:
 
-        value = float(value)
+        response = requests.post(
+            DISCORD_WEBHOOK_URL,
+            json={
+                "content": message
+            },
+            timeout=15,
+        )
 
-        if value.is_integer():
+        if response.status_code in (
+            200,
+            204,
+        ):
 
-            return f"{int(value):,}"
+            print(
+                "[DISCORD] "
+                "Notification sent."
+            )
 
-        return f"{value:,.2f}"
+            return True
 
-    except Exception:
+        print(
+            f"[DISCORD] ERROR: "
+            f"HTTP {response.status_code}"
+        )
 
-        return str(value)
+        print(
+            response.text
+        )
+
+        return False
+
+    except Exception as e:
+
+        print(
+            f"[DISCORD] ERROR: "
+            f"{e}"
+        )
+
+        return False
 
 
 # ============================================================
@@ -1586,18 +1777,6 @@ def build_discord_message(
         )
     )
 
-    ask_qty_diff = number(
-        difference.get(
-            "ask_quantity_diff"
-        )
-    )
-
-    bid_qty_diff = number(
-        difference.get(
-            "bid_quantity_diff"
-        )
-    )
-
     current_oi = number(
         difference.get(
             "current_open_interest"
@@ -1621,117 +1800,99 @@ def build_discord_message(
         ""
     )
 
-    # --------------------------------------------------------
-    # 絵文字
-    # --------------------------------------------------------
+    # ========================================================
+    # Emoji
+    # ========================================================
 
     if "OI_INCREASE" in alert_type:
 
-        icon = "🟢"
+        emoji = "🟢"
 
     elif "OI_DECREASE" in alert_type:
 
-        icon = "🔴"
+        emoji = "🔴"
 
     elif "VOLUME" in alert_type:
 
-        icon = "🟡"
+        emoji = "📊"
+
+    elif "PRICE" in alert_type:
+
+        emoji = "💹"
 
     else:
 
-        icon = "🔔"
+        emoji = "⚠️"
+
+    # ========================================================
+    # Direction
+    # ========================================================
+
+    if oi_diff > 0:
+
+        oi_direction = "増加"
+
+    elif oi_diff < 0:
+
+        oi_direction = "減少"
+
+    else:
+
+        oi_direction = "変化なし"
+
+    if volume_diff > 0:
+
+        volume_direction = "増加"
+
+    elif volume_diff < 0:
+
+        volume_direction = "減少"
+
+    else:
+
+        volume_direction = "変化なし"
+
+    if price_diff > 0:
+
+        price_direction = "上昇"
+
+    elif price_diff < 0:
+
+        price_direction = "下落"
+
+    else:
+
+        price_direction = "変化なし"
+
+    # ========================================================
+    # Message
+    # ========================================================
 
     message = (
-        f"{icon} **JPX OPTION ALERT**\n"
+        f"{emoji} **JPX OPTION ALERT**\n"
         f"\n"
-        f"**Contract:** {contract}\n"
-        f"**Type:** {option_type}\n"
-        f"**Strike:** {fmt(strike)}\n"
+        f"**{contract} {option_type} "
+        f"{fmt(strike)}**\n"
         f"\n"
-        f"📊 **Open Interest**\n"
-        f"Current: {fmt(current_oi)}\n"
-        f"Change: **{fmt(oi_diff)}**\n"
+        f"Alert: `{alert_type}`\n"
         f"\n"
-        f"📈 **Volume**\n"
-        f"Current: {fmt(current_volume)}\n"
-        f"Change: **{fmt(volume_diff)}**\n"
+        f"📌 建玉残(OI)\n"
+        f"現在: `{fmt(current_oi)}`\n"
+        f"差分: `{fmt(oi_diff)}` "
+        f"({oi_direction})\n"
         f"\n"
-        f"💴 **Last Price**\n"
-        f"Current: {fmt(current_price)}\n"
-        f"Change: **{fmt(price_diff)}**\n"
+        f"📊 出来高\n"
+        f"現在: `{fmt(current_volume)}`\n"
+        f"差分: `+{fmt(volume_diff)}` "
+        f"({volume_direction})\n"
         f"\n"
-        f"🟦 **Ask Quantity Change:** "
-        f"{fmt(ask_qty_diff)}\n"
-        f"🟥 **Bid Quantity Change:** "
-        f"{fmt(bid_qty_diff)}\n"
-        f"\n"
-        f"🚨 **Alert:** {alert_type}\n"
-        f"\n"
-        f"🕐 {difference.get('collected_at', '')}"
+        f"💹 最終価格\n"
+        f"現在: `{fmt(current_price)}`\n"
+        f"差分: `{fmt(price_diff)}` "
+        f"({price_direction})\n"
     )
 
     return message
-
-
-# ============================================================
-# Send Discord message
-# ============================================================
-
-def send_discord_message(
-    message
-):
-
-    if not DISCORD_WEBHOOK_URL:
-
-        print(
-            "[DISCORD] "
-            "ERROR: "
-            "DISCORD_WEBHOOK_URL is not set."
-        )
-
-        return False
-
-    try:
-
-        response = requests.post(
-
-            DISCORD_WEBHOOK_URL,
-
-            json={
-                "content": message
-            },
-
-            timeout=15,
-        )
-
-        if response.status_code in (
-            200,
-            204,
-        ):
-
-            print(
-                "[DISCORD] "
-                "Notification sent."
-            )
-
-            return True
-
-        print(
-            f"[DISCORD] "
-            f"HTTP {response.status_code}: "
-            f"{response.text}"
-        )
-
-        return False
-
-    except Exception as e:
-
-        print(
-            f"[DISCORD] "
-            f"Notification failed: {e}"
-        )
-
-        return False
 
 
 # ============================================================
@@ -1753,9 +1914,9 @@ def send_alerts(
         "========================================"
     )
 
-    # --------------------------------------------------------
-    # Webhookチェック
-    # --------------------------------------------------------
+    # ========================================================
+    # Webhook check
+    # ========================================================
 
     if DISCORD_WEBHOOK_URL:
 
@@ -1768,19 +1929,16 @@ def send_alerts(
 
         print(
             "[DISCORD] "
-            "ERROR: Webhook URL is NOT configured."
+            "Webhook URL is NOT configured."
         )
 
-    # --------------------------------------------------------
-    # Alert対象抽出
-    # --------------------------------------------------------
+    # ========================================================
+    # Alert candidates
+    # ========================================================
 
     alert_records = [
-
         row
-
         for row in differences
-
         if row.get(
             "alert_type",
             ""
@@ -1792,10 +1950,6 @@ def send_alerts(
         f"{len(alert_records)}"
     )
 
-    # --------------------------------------------------------
-    # 対象なし
-    # --------------------------------------------------------
-
     if not alert_records:
 
         print(
@@ -1805,32 +1959,60 @@ def send_alerts(
 
         return
 
-    # --------------------------------------------------------
-    # 最大件数制限
-    # --------------------------------------------------------
+    # ========================================================
+    # Limit
+    # ========================================================
 
-    if len(alert_records) > MAX_DISCORD_ALERTS:
+    alert_records = alert_records[
+        :MAX_DISCORD_ALERTS
+    ]
 
-        print(
-            f"[DISCORD] "
-            f"Limiting alerts to "
-            f"{MAX_DISCORD_ALERTS}"
-        )
-
-        alert_records = (
-            alert_records[
-                :MAX_DISCORD_ALERTS
-            ]
-        )
-
-    # --------------------------------------------------------
-    # 通知
-    # --------------------------------------------------------
+    # ========================================================
+    # Send
+    # ========================================================
 
     for index, difference in enumerate(
         alert_records,
-        start=1,
+        start=1
     ):
+
+        contract = difference.get(
+            "contract",
+            ""
+        )
+
+        option_type = difference.get(
+            "option_type",
+            ""
+        )
+
+        strike = difference.get(
+            "strike",
+            ""
+        )
+
+        oi_diff = number(
+            difference.get(
+                "open_interest_diff"
+            )
+        )
+
+        volume_diff = number(
+            difference.get(
+                "volume_diff"
+            )
+        )
+
+        price_diff = number(
+            difference.get(
+                "last_price_diff"
+            )
+        )
+
+        alert_type = difference.get(
+            "alert_type",
+            ""
+        )
 
         print()
         print(
@@ -1839,29 +2021,29 @@ def send_alerts(
         )
 
         print(
-            f"{difference.get('contract')} "
-            f"{difference.get('option_type')} "
-            f"{difference.get('strike')}"
+            f"{contract} "
+            f"{option_type} "
+            f"{fmt(strike)}"
         )
 
         print(
             f"OI diff: "
-            f"{fmt(difference.get('open_interest_diff'))}"
+            f"{fmt(oi_diff)}"
         )
 
         print(
             f"Volume diff: "
-            f"{fmt(difference.get('volume_diff'))}"
+            f"{fmt(volume_diff)}"
         )
 
         print(
             f"Price diff: "
-            f"{fmt(difference.get('last_price_diff'))}"
+            f"{fmt(price_diff)}"
         )
 
         print(
             f"Alert type: "
-            f"{difference.get('alert_type')}"
+            f"{alert_type}"
         )
 
         message = build_discord_message(
@@ -1879,187 +2061,9 @@ def send_alerts(
                 "Failed to send alert."
             )
 
-        if index < len(alert_records):
-
-            time.sleep(
-                DISCORD_INTERVAL
-            )
-
-
-# ============================================================
-# History filename
-# ============================================================
-
-def get_history_file(
-    trading_day
-):
-
-    match = re.search(
-        r"(\d{4})/(\d{2})/(\d{2})",
-        trading_day,
-    )
-
-    if match:
-
-        date_string = (
-            f"{match.group(1)}-"
-            f"{match.group(2)}-"
-            f"{match.group(3)}"
+        time.sleep(
+            DISCORD_INTERVAL
         )
-
-    else:
-
-        date_string = datetime.now(
-            JST
-        ).strftime(
-            "%Y-%m-%d"
-        )
-
-    return (
-        HISTORY_DIR /
-        f"{date_string}.csv"
-    )
-
-
-# ============================================================
-# Save history
-# ============================================================
-
-def save_history(
-    records,
-    trading_day,
-):
-
-    if not records:
-        return
-
-    history_file = get_history_file(
-        trading_day
-    )
-
-    existing_keys = set()
-
-    if history_file.exists():
-
-        try:
-
-            with open(
-                history_file,
-                "r",
-                encoding="utf-8-sig",
-                newline="",
-            ) as f:
-
-                reader = csv.DictReader(
-                    f
-                )
-
-                for row in reader:
-
-                    key = (
-                        row.get(
-                            "contract",
-                            ""
-                        ),
-
-                        row.get(
-                            "option_type",
-                            ""
-                        ),
-
-                        row.get(
-                            "strike",
-                            ""
-                        ),
-
-                        row.get(
-                            "qri_update_time",
-                            ""
-                        ),
-                    )
-
-                    existing_keys.add(
-                        key
-                    )
-
-        except Exception as e:
-
-            print(
-                f"[HISTORY] "
-                f"Read error: {e}"
-            )
-
-    new_records = []
-
-    for record in records:
-
-        key = (
-
-            record.get(
-                "contract",
-                ""
-            ),
-
-            record.get(
-                "option_type",
-                ""
-            ),
-
-            str(
-                record.get(
-                    "strike",
-                    ""
-                )
-            ),
-
-            record.get(
-                "qri_update_time",
-                ""
-            ),
-        )
-
-        if key not in existing_keys:
-
-            new_records.append(
-                record
-            )
-
-    if not new_records:
-
-        print(
-            "[HISTORY] "
-            "No new records."
-        )
-
-        return
-
-    file_exists = history_file.exists()
-
-    with open(
-        history_file,
-        "a",
-        encoding="utf-8-sig",
-        newline="",
-    ) as f:
-
-        writer = csv.DictWriter(
-            f,
-            fieldnames=FIELDNAMES,
-        )
-
-        if not file_exists:
-
-            writer.writeheader()
-
-        writer.writerows(
-            new_records
-        )
-
-    print(
-        f"[HISTORY] "
-        f"{history_file} "
-        f"+{len(new_records)} records"
-    )
 
 
 # ============================================================
@@ -2101,9 +2105,7 @@ def main():
     )
 
     # ========================================================
-    # 前回データ
-    #
-    # latest.csvを必ず比較対象にする
+    # Load previous latest.csv
     # ========================================================
 
     previous_records = load_csv(
@@ -2112,11 +2114,7 @@ def main():
 
     print(
         f"[PREVIOUS] "
-        f"{LATEST_FILE}"
-    )
-
-    print(
-        f"[PREVIOUS] records="
+        f"latest.csv records="
         f"{len(previous_records)}"
     )
 
@@ -2127,7 +2125,7 @@ def main():
     )
 
     # ========================================================
-    # QRI取得
+    # Fetch QRI
     # ========================================================
 
     all_records = []
@@ -2163,7 +2161,7 @@ def main():
             )
 
     # ========================================================
-    # データ取得失敗
+    # Data validation
     # ========================================================
 
     if not all_records:
@@ -2174,25 +2172,17 @@ def main():
 
     print()
     print(
-        "========================================"
-    )
-
-    print(
         f"[CURRENT] records="
         f"{len(all_records)}"
     )
 
-    print(
-        "========================================"
-    )
-
     # ========================================================
-    # QRI更新チェック
+    # QRI update check
     # ========================================================
-
-    qri_updated = False
 
     new_records = []
+
+    qri_updated = False
 
     for contract in CONTRACTS.keys():
 
@@ -2233,11 +2223,11 @@ def main():
             current_time != previous_time
         ):
 
-            qri_updated = True
-
             print(
                 f"[NEW] {contract}"
             )
+
+            qri_updated = True
 
             for record in all_records:
 
@@ -2245,8 +2235,7 @@ def main():
                     record.get(
                         "contract"
                     )
-                    ==
-                    contract
+                    == contract
                 ):
 
                     new_records.append(
@@ -2261,9 +2250,7 @@ def main():
             )
 
     # ========================================================
-    # 差分計算
-    #
-    # latest.csvを書き換える前に実行
+    # Calculate differences
     # ========================================================
 
     differences = calculate_differences(
@@ -2277,8 +2264,6 @@ def main():
 
     # ========================================================
     # Discord notification
-    #
-    # QRI更新があった場合だけ通知
     # ========================================================
 
     if qri_updated:
@@ -2297,14 +2282,12 @@ def main():
 
         print()
         print(
-            "[DISCORD] "
+            "[QRI] "
             "No new QRI update."
         )
 
     # ========================================================
-    # latest.csv更新
-    #
-    # Discord通知の後に更新する
+    # Save latest
     # ========================================================
 
     save_latest(
@@ -2312,40 +2295,22 @@ def main():
     )
 
     # ========================================================
-    # history保存
+    # Save history
     # ========================================================
 
     if new_records:
 
-        # 複数限月があるので
-        # trading_dayごとに保存
-
-        trading_days = {}
-
-        for record in new_records:
-
-            trading_day = record.get(
+        trading_day = (
+            new_records[0].get(
                 "trading_day",
                 ""
             )
+        )
 
-            trading_days.setdefault(
-                trading_day,
-                []
-            )
-
-            trading_days[
-                trading_day
-            ].append(
-                record
-            )
-
-        for trading_day, records in trading_days.items():
-
-            save_history(
-                records,
-                trading_day,
-            )
+        save_history(
+            new_records,
+            trading_day,
+        )
 
     # ========================================================
     # Summary
@@ -2355,11 +2320,9 @@ def main():
     print(
         "========================================"
     )
-
     print(
         "SUMMARY"
     )
-
     print(
         "========================================"
     )
@@ -2370,11 +2333,6 @@ def main():
     )
 
     print(
-        f"Previous records: "
-        f"{len(previous_records)}"
-    )
-
-    print(
         f"New records: "
         f"{len(new_records)}"
     )
@@ -2382,20 +2340,6 @@ def main():
     print(
         f"Difference records: "
         f"{len(differences)}"
-    )
-
-    alert_count = sum(
-        1
-        for row in differences
-        if row.get(
-            "alert_type",
-            ""
-        )
-    )
-
-    print(
-        f"Alert candidates: "
-        f"{alert_count}"
     )
 
     print(
