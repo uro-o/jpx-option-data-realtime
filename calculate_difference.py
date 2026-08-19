@@ -1,6 +1,5 @@
 import csv
 from pathlib import Path
-from datetime import datetime, timezone, timedelta
 
 
 # ============================================================
@@ -8,741 +7,243 @@ from datetime import datetime, timezone, timedelta
 # ============================================================
 
 DATA_DIR = Path("data")
-HISTORY_DIR = DATA_DIR / "history"
-
+LATEST_FILE = DATA_DIR / "latest.csv"
 DIFFERENCE_FILE = DATA_DIR / "differences.csv"
 
-JST = timezone(
-    timedelta(hours=9)
-)
 
-
-# ============================================================
-# Output columns
-# ============================================================
-
-FIELDNAMES = [
-    "qri_update_time",
-    "previous_qri_update_time",
-    "collected_at",
-
-    "contract",
-    "option_type",
-    "strike",
-
-    "previous_volume",
-    "current_volume",
-    "volume_change",
-
-    "previous_open_interest",
-    "current_open_interest",
-    "open_interest_change",
-
-    "previous_last_price",
-    "current_last_price",
-    "last_price_change",
-
-    "previous_iv",
-    "current_iv",
-    "iv_change",
-
-    "trade_time",
+# 比較対象となる項目
+NUMERIC_FIELDS = [
+    "open_interest",
+    "volume",
+    "ask_price",
+    "ask_quantity",
+    "bid_price",
+    "bid_quantity",
+    "iv",
+    "last_price",
 ]
 
 
 # ============================================================
-# Number conversion
+# Utility
 # ============================================================
 
-def to_number(value):
-
+def to_float(value):
     if value is None:
-        return None
+        return 0.0
 
     value = str(value).strip()
 
-    if value == "":
-        return None
+    if value in ("", "-", "--"):
+        return 0.0
 
     try:
-
-        number = float(
-            value.replace(",", "")
-        )
-
-        if number.is_integer():
-            return int(number)
-
-        return number
-
+        return float(value.replace(",", ""))
     except ValueError:
-
-        return None
-
-
-# ============================================================
-# Get today's history file
-# ============================================================
-
-def get_today_history_file():
-
-    today = datetime.now(
-        JST
-    ).strftime(
-        "%Y-%m-%d"
-    )
-
-    return (
-        HISTORY_DIR /
-        f"{today}.csv"
-    )
+        return 0.0
 
 
 # ============================================================
-# Load history
+# Load latest.csv
 # ============================================================
 
-def load_history(
-    history_file
-):
+def load_latest():
 
-    if not history_file.exists():
-
-        print(
-            f"[ERROR] "
-            f"History file not found: "
-            f"{history_file}"
-        )
-
+    if not LATEST_FILE.exists():
+        print("[ERROR] latest.csv not found.")
         return []
 
     with open(
-        history_file,
+        LATEST_FILE,
         "r",
         encoding="utf-8-sig",
         newline="",
     ) as f:
 
-        reader = csv.DictReader(f)
-
-        return list(reader)
+        return list(csv.DictReader(f))
 
 
 # ============================================================
-# Sort QRI update times
+# Load previous snapshot
 # ============================================================
 
-def get_update_times(
-    rows
-):
+def load_previous_snapshot():
 
-    times = set()
+    history_dir = DATA_DIR / "history"
 
-    for row in rows:
+    if not history_dir.exists():
+        return []
 
-        value = row.get(
-            "qri_update_time",
-            ""
-        )
-
-        if value:
-
-            times.add(value)
-
-    return sorted(times)
-
-
-# ============================================================
-# Get numeric value
-# ============================================================
-
-def numeric(
-    row,
-    key
-):
-
-    value = row.get(
-        key,
-        ""
+    files = sorted(
+        history_dir.glob("*.csv")
     )
 
-    return to_number(value)
+    if not files:
+        return []
+
+    # 最新のhistoryファイル
+    latest_history = files[-1]
+
+    print(
+        f"[PREVIOUS] {latest_history}"
+    )
+
+    with open(
+        latest_history,
+        "r",
+        encoding="utf-8-sig",
+        newline="",
+    ) as f:
+
+        return list(csv.DictReader(f))
 
 
 # ============================================================
-# Calculate difference
+# Create key
+# ============================================================
+
+def make_key(row):
+
+    return (
+        row.get("contract", ""),
+        row.get("option_type", ""),
+        row.get("strike", ""),
+    )
+
+
+# ============================================================
+# Calculate differences
 # ============================================================
 
 def calculate_difference(
-    rows
+    current,
+    previous,
 ):
 
-    if not rows:
+    previous_map = {
+        make_key(row): row
+        for row in previous
+    }
 
-        return []
+    results = []
 
-    update_times = (
-        get_update_times(
-            rows
-        )
-    )
+    for row in current:
 
-    # --------------------------------------------------------
-    # Need at least two QRI snapshots
-    # --------------------------------------------------------
+        key = make_key(row)
 
-    if len(update_times) < 2:
+        previous_row = previous_map.get(key)
 
-        print()
-        print(
-            "[INFO] "
-            "Not enough snapshots."
-        )
+        # ----------------------------------------
+        # 初回データ
+        # ----------------------------------------
 
-        print(
-            f"Available snapshots: "
-            f"{len(update_times)}"
-        )
-
-        return []
-
-    previous_time = (
-        update_times[-2]
-    )
-
-    current_time = (
-        update_times[-1]
-    )
-
-    print()
-    print(
-        "========================================"
-    )
-
-    print(
-        "CALCULATING DIFFERENCE"
-    )
-
-    print(
-        "========================================"
-    )
-
-    print(
-        f"Previous QRI: "
-        f"{previous_time}"
-    )
-
-    print(
-        f"Current QRI : "
-        f"{current_time}"
-    )
-
-    # ========================================================
-    # Create lookup tables
-    # ========================================================
-
-    previous_rows = {}
-
-    current_rows = {}
-
-    for row in rows:
-
-        key = (
-            row.get(
-                "contract",
-                ""
-            ),
-            row.get(
-                "option_type",
-                ""
-            ),
-            row.get(
-                "strike",
-                ""
-            ),
-        )
-
-        update_time = row.get(
-            "qri_update_time",
-            ""
-        )
-
-        if update_time == previous_time:
-
-            previous_rows[key] = row
-
-        elif update_time == current_time:
-
-            current_rows[key] = row
-
-    # ========================================================
-    # Calculate
-    # ========================================================
-
-    differences = []
-
-    for key, current in (
-        current_rows.items()
-    ):
-
-        previous = (
-            previous_rows.get(key)
-        )
-
-        # ----------------------------------------------------
-        # Contract not found in previous snapshot
-        # ----------------------------------------------------
-
-        if previous is None:
-
+        if previous_row is None:
             continue
 
-        # ----------------------------------------------------
-        # Volume
-        # ----------------------------------------------------
-
-        previous_volume = numeric(
-            previous,
-            "volume"
-        )
-
-        current_volume = numeric(
-            current,
-            "volume"
-        )
-
-        if (
-            previous_volume is not None
-            and
-            current_volume is not None
-        ):
-
-            volume_change = (
-                current_volume
-                -
-                previous_volume
-            )
-
-        else:
-
-            volume_change = None
-
-        # ----------------------------------------------------
-        # Open Interest
-        # ----------------------------------------------------
-
-        previous_oi = numeric(
-            previous,
-            "open_interest"
-        )
-
-        current_oi = numeric(
-            current,
-            "open_interest"
-        )
-
-        if (
-            previous_oi is not None
-            and
-            current_oi is not None
-        ):
-
-            oi_change = (
-                current_oi
-                -
-                previous_oi
-            )
-
-        else:
-
-            oi_change = None
-
-        # ----------------------------------------------------
-        # Last price
-        # ----------------------------------------------------
-
-        previous_last = numeric(
-            previous,
-            "last_price"
-        )
-
-        current_last = numeric(
-            current,
-            "last_price"
-        )
-
-        if (
-            previous_last is not None
-            and
-            current_last is not None
-        ):
-
-            last_change = (
-                current_last
-                -
-                previous_last
-            )
-
-        else:
-
-            last_change = None
-
-        # ----------------------------------------------------
-        # IV
-        # ----------------------------------------------------
-
-        previous_iv = numeric(
-            previous,
-            "iv"
-        )
-
-        current_iv = numeric(
-            current,
-            "iv"
-        )
-
-        if (
-            previous_iv is not None
-            and
-            current_iv is not None
-        ):
-
-            iv_change = (
-                current_iv
-                -
-                previous_iv
-            )
-
-        else:
-
-            iv_change = None
-
-        # ----------------------------------------------------
-        # Record
-        # ----------------------------------------------------
-
-        difference = {
-
+        result = {
             "qri_update_time":
-                current_time,
-
-            "previous_qri_update_time":
-                previous_time,
+                row.get("qri_update_time", ""),
 
             "collected_at":
-                current.get(
-                    "collected_at",
-                    ""
-                ),
+                row.get("collected_at", ""),
 
             "contract":
-                current.get(
-                    "contract",
-                    ""
-                ),
+                row.get("contract", ""),
 
             "option_type":
-                current.get(
-                    "option_type",
-                    ""
-                ),
+                row.get("option_type", ""),
 
             "strike":
-                current.get(
-                    "strike",
-                    ""
-                ),
-
-            "previous_volume":
-                previous_volume,
-
-            "current_volume":
-                current_volume,
-
-            "volume_change":
-                volume_change,
-
-            "previous_open_interest":
-                previous_oi,
-
-            "current_open_interest":
-                current_oi,
-
-            "open_interest_change":
-                oi_change,
-
-            "previous_last_price":
-                previous_last,
-
-            "current_last_price":
-                current_last,
-
-            "last_price_change":
-                last_change,
-
-            "previous_iv":
-                previous_iv,
-
-            "current_iv":
-                current_iv,
-
-            "iv_change":
-                iv_change,
-
-            "trade_time":
-                current.get(
-                    "trade_time",
-                    ""
-                ),
+                row.get("strike", ""),
         }
 
-        differences.append(
-            difference
+        # ----------------------------------------
+        # 差分計算
+        # ----------------------------------------
+
+        for field in NUMERIC_FIELDS:
+
+            current_value = to_float(
+                row.get(field)
+            )
+
+            previous_value = to_float(
+                previous_row.get(field)
+            )
+
+            difference = (
+                current_value
+                - previous_value
+            )
+
+            result[
+                f"{field}_diff"
+            ] = difference
+
+        # ----------------------------------------
+        # 特に重要な項目
+        # ----------------------------------------
+
+        result["volume_current"] = to_float(
+            row.get("volume")
         )
 
-    return differences
+        result["open_interest_current"] = to_float(
+            row.get("open_interest")
+        )
+
+        result["last_price_current"] = to_float(
+            row.get("last_price")
+        )
+
+        results.append(result)
+
+    return results
 
 
 # ============================================================
-# Save differences
+# Save
 # ============================================================
 
-def save_differences(
-    differences
+def save_difference(
+    records
 ):
 
-    if not differences:
+    if not records:
 
         print(
-            "[DIFFERENCE] "
-            "No differences to save."
+            "[INFO] No comparable records."
         )
 
         return
 
-    # --------------------------------------------------------
-    # Existing records
-    # --------------------------------------------------------
-
-    existing_keys = set()
-
-    if DIFFERENCE_FILE.exists():
-
-        try:
-
-            with open(
-                DIFFERENCE_FILE,
-                "r",
-                encoding="utf-8-sig",
-                newline="",
-            ) as f:
-
-                reader = csv.DictReader(f)
-
-                for row in reader:
-
-                    key = (
-                        row.get(
-                            "qri_update_time",
-                            ""
-                        ),
-                        row.get(
-                            "contract",
-                            ""
-                        ),
-                        row.get(
-                            "option_type",
-                            ""
-                        ),
-                        row.get(
-                            "strike",
-                            ""
-                        ),
-                    )
-
-                    existing_keys.add(
-                        key
-                    )
-
-        except Exception as e:
-
-            print(
-                f"[WARNING] "
-                f"Could not read "
-                f"differences.csv: "
-                f"{e}"
-            )
-
-    # --------------------------------------------------------
-    # Remove duplicates
-    # --------------------------------------------------------
-
-    new_differences = []
-
-    for row in differences:
-
-        key = (
-            row[
-                "qri_update_time"
-            ],
-            row[
-                "contract"
-            ],
-            row[
-                "option_type"
-            ],
-            str(
-                row[
-                    "strike"
-                ]
-            ),
-        )
-
-        if key not in existing_keys:
-
-            new_differences.append(
-                row
-            )
-
-    if not new_differences:
-
-        print(
-            "[DIFFERENCE] "
-            "No new differences."
-        )
-
-        return
-
-    # --------------------------------------------------------
-    # Append
-    # --------------------------------------------------------
-
-    file_exists = (
-        DIFFERENCE_FILE.exists()
+    fieldnames = list(
+        records[0].keys()
     )
 
     with open(
         DIFFERENCE_FILE,
-        "a",
+        "w",
         encoding="utf-8-sig",
         newline="",
     ) as f:
 
         writer = csv.DictWriter(
             f,
-            fieldnames=FIELDNAMES
+            fieldnames=fieldnames,
         )
 
-        if not file_exists:
-
-            writer.writeheader()
+        writer.writeheader()
 
         writer.writerows(
-            new_differences
+            records
         )
 
     print(
         f"[DIFFERENCE] "
         f"{DIFFERENCE_FILE} "
-        f"+{len(new_differences)} records"
+        f"records={len(records)}"
     )
-
-
-# ============================================================
-# Show large volume changes
-# ============================================================
-
-def show_large_changes(
-    differences
-):
-
-    if not differences:
-
-        return
-
-    # ========================================================
-    # Threshold
-    # ========================================================
-
-    threshold = 50
-
-    large_changes = []
-
-    for row in differences:
-
-        change = to_number(
-            row.get(
-                "volume_change"
-            )
-        )
-
-        if (
-            change is not None
-            and
-            change >= threshold
-        ):
-
-            large_changes.append(
-                row
-            )
-
-    if not large_changes:
-
-        print()
-        print(
-            "[LARGE TRADE] "
-            "No volume increase >= "
-            f"{threshold}"
-        )
-
-        return
-
-    # --------------------------------------------------------
-    # Sort by volume change
-    # --------------------------------------------------------
-
-    large_changes.sort(
-        key=lambda x:
-            to_number(
-                x.get(
-                    "volume_change"
-                )
-            )
-            or 0,
-        reverse=True,
-    )
-
-    print()
-    print(
-        "========================================"
-    )
-
-    print(
-        f"LARGE OPTION TRADES "
-        f"(Volume +{threshold} or more)"
-    )
-
-    print(
-        "========================================"
-    )
-
-    for row in large_changes:
-
-        print(
-            f"{row['contract']} "
-            f"{row['option_type']} "
-            f"{row['strike']} | "
-            f"Volume "
-            f"{row['previous_volume']} "
-            f"→ "
-            f"{row['current_volume']} "
-            f"(+{row['volume_change']}) | "
-            f"OI "
-            f"{row['previous_open_interest']} "
-            f"→ "
-            f"{row['current_open_interest']} "
-            f"({row['open_interest_change']:+})"
-        )
 
 
 # ============================================================
@@ -755,60 +256,76 @@ def main():
     print(
         "========================================"
     )
-
     print(
-        "JPX OPTION DIFFERENCE"
+        "CALCULATING DIFFERENCE"
     )
-
     print(
         "========================================"
     )
 
-    history_file = (
-        get_today_history_file()
-    )
+    # ----------------------------------------
+    # Current
+    # ----------------------------------------
+
+    current = load_latest()
 
     print(
-        f"History: "
-        f"{history_file}"
+        f"[CURRENT] "
+        f"records={len(current)}"
     )
 
-    # ========================================================
-    # Load
-    # ========================================================
-
-    rows = load_history(
-        history_file
-    )
-
-    print(
-        f"History records: "
-        f"{len(rows)}"
-    )
-
-    # ========================================================
-    # Calculate
-    # ========================================================
-
-    differences = (
-        calculate_difference(
-            rows
+    if not current:
+        print(
+            "[ERROR] "
+            "No current data."
         )
+        return
+
+    # ----------------------------------------
+    # Previous
+    # ----------------------------------------
+
+    previous = load_previous_snapshot()
+
+    print(
+        f"[PREVIOUS] "
+        f"records={len(previous)}"
     )
 
-    # ========================================================
+    if not previous:
+
+        print(
+            "[INFO] "
+            "No previous snapshot."
+        )
+
+        print(
+            "[INFO] "
+            "Difference will be available "
+            "from the next QRI update."
+        )
+
+        return
+
+    # ----------------------------------------
+    # Calculate
+    # ----------------------------------------
+
+    differences = calculate_difference(
+        current=current,
+        previous=previous,
+    )
+
+    print(
+        f"[RESULT] "
+        f"records={len(differences)}"
+    )
+
+    # ----------------------------------------
     # Save
-    # ========================================================
+    # ----------------------------------------
 
-    save_differences(
-        differences
-    )
-
-    # ========================================================
-    # Large trade display
-    # ========================================================
-
-    show_large_changes(
+    save_difference(
         differences
     )
 
@@ -816,11 +333,9 @@ def main():
     print(
         "========================================"
     )
-
     print(
-        "DONE"
+        "DIFFERENCE COMPLETE"
     )
-
     print(
         "========================================"
     )
@@ -831,5 +346,4 @@ def main():
 # ============================================================
 
 if __name__ == "__main__":
-
     main()
