@@ -2,12 +2,12 @@ name: Update JPX Option Data Realtime
 
 on:
 
-  # GitHub上から手動実行できるようにする
+  # GitHub画面から手動実行
   workflow_dispatch:
 
-  # 1分ごとにチェック
+  # 月～金、24時間、1分ごと
   schedule:
-    - cron: "* * 0-6 * * 1-5"
+    - cron: "* * * * 1-5"
 
 
 jobs:
@@ -22,7 +22,7 @@ jobs:
     steps:
 
       # ==========================================
-      # Checkout
+      # GitHubリポジトリ取得
       # ==========================================
 
       - name: Checkout repository
@@ -30,7 +30,7 @@ jobs:
 
 
       # ==========================================
-      # Python
+      # Pythonセットアップ
       # ==========================================
 
       - name: Setup Python
@@ -41,7 +41,7 @@ jobs:
 
 
       # ==========================================
-      # Install
+      # ライブラリインストール
       # ==========================================
 
       - name: Install dependencies
@@ -55,7 +55,7 @@ jobs:
 
 
       # ==========================================
-      # QRI取得
+      # QRIデータ取得
       # ==========================================
 
       - name: Get QRI option data
@@ -65,7 +65,7 @@ jobs:
 
 
       # ==========================================
-      # CSV確認
+      # データ確認
       # ==========================================
 
       - name: Check data
@@ -75,7 +75,10 @@ jobs:
           echo "Data files"
           echo "========================================"
 
-          find data -type f -maxdepth 2 -print
+          find data \
+            -maxdepth 2 \
+            -type f \
+            -print
 
           echo ""
 
@@ -84,8 +87,21 @@ jobs:
           echo "========================================"
 
           if [ -f data/latest.csv ]; then
+
+            echo "File exists."
+
             wc -l data/latest.csv
+
+            echo ""
+
             head -5 data/latest.csv
+
+          else
+
+            echo "latest.csv not found."
+
+            exit 1
+
           fi
 
 
@@ -104,7 +120,7 @@ jobs:
 
 
       # ==========================================
-      # Commit
+      # データをCommit
       # ==========================================
 
       - name: Commit updated data
@@ -125,7 +141,7 @@ jobs:
 
 
       # ==========================================
-      # Push
+      # GitHubへPush
       # ==========================================
 
       - name: Push changes
