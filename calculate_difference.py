@@ -12,7 +12,7 @@ import requests
 
 DATA_DIR = Path("data")
 
-CURRENT_FILE = DATA_DIR / "latest.csv"
+LATEST_FILE = DATA_DIR / "latest.csv"
 PREVIOUS_FILE = DATA_DIR / "previous.csv"
 DIFFERENCES_FILE = DATA_DIR / "differences.csv"
 
@@ -28,64 +28,35 @@ DISCORD_WEBHOOK_URL = os.environ.get(
 
 
 # ============================================================
-# Alert settings
+# Alert thresholds
 # ============================================================
 
-# ------------------------------------------------------------
-# 出来高
-# ------------------------------------------------------------
-
+# 通常の個別アラート
 VOLUME_THRESHOLD = 100
-
-
-# ------------------------------------------------------------
-# OI
-# ------------------------------------------------------------
-
 OI_INCREASE_THRESHOLD = 100
-
 OI_DECREASE_THRESHOLD = 100
-
-
-# ------------------------------------------------------------
-# 価格
-# ------------------------------------------------------------
-
 PRICE_CHANGE_THRESHOLD = 100
 
 
-# ------------------------------------------------------------
-# 「OI + 出来高」の複合条件
-#
-# 例えば
-#
-# Volume +100以上
-# OI +100以上
-#
-# → 新規建玉候補
-# ------------------------------------------------------------
+# ============================================================
+# Flow thresholds
+# ============================================================
 
-NEW_POSITION_VOLUME_THRESHOLD = 100
+# Flow一覧に掲載する最低Volume増加
+FLOW_VOLUME_MIN = 5
 
-NEW_POSITION_OI_THRESHOLD = 100
+# Flow一覧に掲載する最低OI変化
+FLOW_OI_MIN = 5
+
+# Flowランキング最大件数
+FLOW_MAX_ITEMS = 10
 
 
-# ------------------------------------------------------------
-# 手仕舞い候補
-# ------------------------------------------------------------
+# ============================================================
+# Discord message limits
+# ============================================================
 
-CLOSE_POSITION_VOLUME_THRESHOLD = 100
-
-CLOSE_POSITION_OI_THRESHOLD = 100
-
-
-# ------------------------------------------------------------
-# Discord
-# ------------------------------------------------------------
-
-MAX_ALERTS = 20
-
-DISCORD_INTERVAL = 0.5
+DISCORD_MAX_LENGTH = 1900
 
 
 # ============================================================
@@ -93,10 +64,8 @@ DISCORD_INTERVAL = 0.5
 # ============================================================
 
 DIFFERENCE_FIELDS = [
-
     "qri_update_time",
     "collected_at",
-
     "contract",
     "option_type",
     "strike",
@@ -122,45 +91,27 @@ DIFFERENCE_FIELDS = [
     "bid_quantity_diff",
 
     "alert_type",
-
 ]
 
 
 # ============================================================
-# Number conversion
+# Number helper
 # ============================================================
 
 def number(value):
 
     if value is None:
-
         return 0.0
-
 
     if value == "":
-
         return 0.0
-
 
     try:
 
-        text = str(value)
-
-        text = text.replace(
-            ",",
-            ""
+        return float(
+            str(value)
+            .replace(",", "")
         )
-
-        text = text.strip()
-
-
-        if text == "":
-
-            return 0.0
-
-
-        return float(text)
-
 
     except Exception:
 
@@ -173,22 +124,40 @@ def number(value):
 
 def fmt(value):
 
-    try:
+    value = number(value)
 
-        value = float(value)
+    if value == 0:
+        return "0"
 
+    if value.is_integer():
+        return f"{int(value):,}"
+
+    return f"{value:,.2f}"
+
+
+# ============================================================
+# Format signed number
+# ============================================================
+
+def fmt_signed(value):
+
+    value = number(value)
+
+    if value > 0:
 
         if value.is_integer():
+            return f"+{int(value):,}"
 
+        return f"+{value:,.2f}"
+
+    if value < 0:
+
+        if value.is_integer():
             return f"{int(value):,}"
-
 
         return f"{value:,.2f}"
 
-
-    except Exception:
-
-        return "-"
+    return "0"
 
 
 # ============================================================
@@ -206,25 +175,18 @@ def load_csv(path):
 
         return []
 
-
     try:
 
         with open(
-
             path,
-
             "r",
-
             encoding="utf-8-sig",
-
             newline="",
-
         ) as f:
 
             rows = list(
                 csv.DictReader(f)
             )
-
 
         print(
             f"[LOAD] "
@@ -232,204 +194,16 @@ def load_csv(path):
             f"records={len(rows)}"
         )
 
-
         return rows
-
 
     except Exception as e:
 
         print(
             f"[ERROR] "
-            f"Could not read "
-            f"{path}: {e}"
+            f"Could not read {path}: {e}"
         )
 
         return []
-
-
-# ============================================================
-# Build key
-# ============================================================
-
-def build_key(row):
-
-    contract = str(
-        row.get(
-            "contract",
-            ""
-        )
-    ).strip()
-
-
-    option_type = str(
-        row.get(
-            "option_type",
-            ""
-        )
-    ).strip()
-
-
-    strike = str(
-        row.get(
-            "strike",
-            ""
-        )
-    ).strip()
-
-
-    return (
-
-        contract,
-
-        option_type,
-
-        strike,
-
-    )
-
-
-# ============================================================
-# Classify alert
-# ============================================================
-
-def classify_alert(
-
-    oi_diff,
-
-    volume_diff,
-
-    price_diff,
-
-    previous_price_exists,
-
-    current_price_exists,
-
-):
-
-    alerts = []
-
-
-    # ========================================================
-    # 1. 新規建玉候補
-    #
-    # OI増加 + 出来高増加
-    # ========================================================
-
-    if (
-
-        oi_diff
-        >= NEW_POSITION_OI_THRESHOLD
-
-        and
-
-        volume_diff
-        >= NEW_POSITION_VOLUME_THRESHOLD
-
-    ):
-
-        alerts.append(
-            "NEW_POSITION"
-        )
-
-
-    # ========================================================
-    # 2. 手仕舞い候補
-    #
-    # OI減少 + 出来高増加
-    # ========================================================
-
-    elif (
-
-        oi_diff
-        <= -CLOSE_POSITION_OI_THRESHOLD
-
-        and
-
-        volume_diff
-        >= CLOSE_POSITION_VOLUME_THRESHOLD
-
-    ):
-
-        alerts.append(
-            "CLOSE_POSITION"
-        )
-
-
-    # ========================================================
-    # 3. OI単独増加
-    # ========================================================
-
-    elif (
-
-        oi_diff
-        >= OI_INCREASE_THRESHOLD
-
-    ):
-
-        alerts.append(
-            "OI_INCREASE"
-        )
-
-
-    # ========================================================
-    # 4. OI単独減少
-    # ========================================================
-
-    elif (
-
-        oi_diff
-        <= -OI_DECREASE_THRESHOLD
-
-    ):
-
-        alerts.append(
-            "OI_DECREASE"
-        )
-
-
-    # ========================================================
-    # 5. 出来高急増
-    # ========================================================
-
-    if (
-
-        volume_diff
-        >= VOLUME_THRESHOLD
-
-    ):
-
-        alerts.append(
-            "VOLUME"
-        )
-
-
-    # ========================================================
-    # 6. 価格急変
-    # ========================================================
-
-    if (
-
-        previous_price_exists
-
-        and
-
-        current_price_exists
-
-        and
-
-        abs(price_diff)
-        >= PRICE_CHANGE_THRESHOLD
-
-    ):
-
-        alerts.append(
-            "PRICE"
-        )
-
-
-    return ",".join(
-        alerts
-    )
 
 
 # ============================================================
@@ -437,73 +211,62 @@ def classify_alert(
 # ============================================================
 
 def calculate_differences(
-
     current_records,
-
     previous_records,
-
 ):
 
     print()
-
     print(
         "========================================"
     )
-
     print(
         "CALCULATING DIFFERENCE"
     )
-
     print(
         "========================================"
     )
 
-
     print(
-        f"[CURRENT] "
-        f"records={len(current_records)}"
+        f"[CURRENT] records={len(current_records)}"
     )
 
     print(
-        f"[PREVIOUS] "
-        f"records={len(previous_records)}"
+        f"[PREVIOUS] records={len(previous_records)}"
     )
 
 
-    # ========================================================
+    # --------------------------------------------------------
     # Previous map
-    # ========================================================
+    # --------------------------------------------------------
 
     previous_map = {}
 
-
     for row in previous_records:
 
-        key = build_key(row)
+        key = (
+            row.get("contract", ""),
+            row.get("option_type", ""),
+            row.get("strike", ""),
+        )
 
         previous_map[key] = row
 
 
+    # --------------------------------------------------------
+    # Difference
+    # --------------------------------------------------------
+
     differences = []
-
-
-    # ========================================================
-    # Compare
-    # ========================================================
 
     for current in current_records:
 
-        key = build_key(current)
-
-
-        previous = previous_map.get(
-            key
+        key = (
+            current.get("contract", ""),
+            current.get("option_type", ""),
+            current.get("strike", ""),
         )
 
-
-        # ----------------------------------------------------
-        # 新規登場銘柄は比較しない
-        # ----------------------------------------------------
+        previous = previous_map.get(key)
 
         if previous is None:
 
@@ -520,22 +283,15 @@ def calculate_differences(
             )
         )
 
-
         current_oi = number(
             current.get(
                 "open_interest"
             )
         )
 
-
         oi_diff = (
-
-            current_oi
-
-            -
-
+            current_oi -
             previous_oi
-
         )
 
 
@@ -549,112 +305,42 @@ def calculate_differences(
             )
         )
 
-
         current_volume = number(
             current.get(
                 "volume"
             )
         )
 
-
         volume_diff = (
-
-            current_volume
-
-            -
-
+            current_volume -
             previous_volume
-
         )
 
 
         # ====================================================
-        # Price
+        # Last price
         # ====================================================
-
-        previous_price_raw = (
-
-            previous.get(
-
-                "last_price",
-
-                ""
-
-            )
-
-        )
-
-
-        current_price_raw = (
-
-            current.get(
-
-                "last_price",
-
-                ""
-
-            )
-
-        )
-
-
-        previous_price_exists = (
-
-            str(
-                previous_price_raw
-            ).strip()
-            != ""
-
-        )
-
-
-        current_price_exists = (
-
-            str(
-                current_price_raw
-            ).strip()
-            != ""
-
-        )
-
 
         previous_price = number(
-            previous_price_raw
+            previous.get(
+                "last_price"
+            )
         )
-
 
         current_price = number(
-            current_price_raw
+            current.get(
+                "last_price"
+            )
         )
 
-
-        if (
-
-            previous_price_exists
-
-            and
-
-            current_price_exists
-
-        ):
-
-            price_diff = (
-
-                current_price
-
-                -
-
-                previous_price
-
-            )
-
-        else:
-
-            price_diff = 0.0
+        price_diff = (
+            current_price -
+            previous_price
+        )
 
 
         # ====================================================
-        # Ask
+        # Ask quantity
         # ====================================================
 
         previous_ask_qty = number(
@@ -663,27 +349,20 @@ def calculate_differences(
             )
         )
 
-
         current_ask_qty = number(
             current.get(
                 "ask_quantity"
             )
         )
 
-
         ask_qty_diff = (
-
-            current_ask_qty
-
-            -
-
+            current_ask_qty -
             previous_ask_qty
-
         )
 
 
         # ====================================================
-        # Bid
+        # Bid quantity
         # ====================================================
 
         previous_bid_qty = number(
@@ -692,43 +371,67 @@ def calculate_differences(
             )
         )
 
-
         current_bid_qty = number(
             current.get(
                 "bid_quantity"
             )
         )
 
-
         bid_qty_diff = (
-
-            current_bid_qty
-
-            -
-
+            current_bid_qty -
             previous_bid_qty
-
         )
 
 
         # ====================================================
-        # Alert classification
+        # Alert type
         # ====================================================
 
-        alert_type = classify_alert(
+        alerts = []
 
-            oi_diff=oi_diff,
 
-            volume_diff=volume_diff,
+        if (
+            volume_diff
+            >= VOLUME_THRESHOLD
+        ):
 
-            price_diff=price_diff,
+            alerts.append(
+                "VOLUME"
+            )
 
-            previous_price_exists=
-                previous_price_exists,
 
-            current_price_exists=
-                current_price_exists,
+        if (
+            oi_diff
+            >= OI_INCREASE_THRESHOLD
+        ):
 
+            alerts.append(
+                "OI_INCREASE"
+            )
+
+
+        if (
+            oi_diff
+            <= -OI_DECREASE_THRESHOLD
+        ):
+
+            alerts.append(
+                "OI_DECREASE"
+            )
+
+
+        if (
+            abs(price_diff)
+            >= PRICE_CHANGE_THRESHOLD
+        ):
+
+            alerts.append(
+                "PRICE"
+            )
+
+
+        alert_type = ",".join(
+            alerts
         )
 
 
@@ -739,147 +442,88 @@ def calculate_differences(
         differences.append({
 
             "qri_update_time":
-
                 current.get(
-
                     "qri_update_time",
-
                     ""
-
                 ),
-
 
             "collected_at":
-
                 current.get(
-
                     "collected_at",
-
                     ""
-
                 ),
-
 
             "contract":
-
                 current.get(
-
                     "contract",
-
                     ""
-
                 ),
-
 
             "option_type":
-
                 current.get(
-
                     "option_type",
-
                     ""
-
                 ),
-
 
             "strike":
-
                 current.get(
-
                     "strike",
-
                     ""
-
                 ),
 
-
             "previous_open_interest":
-
                 previous_oi,
 
-
             "current_open_interest":
-
                 current_oi,
 
-
             "open_interest_diff":
-
                 oi_diff,
 
-
             "previous_volume":
-
                 previous_volume,
 
-
             "current_volume":
-
                 current_volume,
 
-
             "volume_diff":
-
                 volume_diff,
 
-
             "previous_last_price":
-
                 previous_price,
 
-
             "current_last_price":
-
                 current_price,
 
-
             "last_price_diff":
-
                 price_diff,
 
-
             "previous_ask_quantity":
-
                 previous_ask_qty,
 
-
             "current_ask_quantity":
-
                 current_ask_qty,
 
-
             "ask_quantity_diff":
-
                 ask_qty_diff,
 
-
             "previous_bid_quantity":
-
                 previous_bid_qty,
 
-
             "current_bid_quantity":
-
                 current_bid_qty,
 
-
             "bid_quantity_diff":
-
                 bid_qty_diff,
 
-
             "alert_type":
-
                 alert_type,
-
         })
 
 
     print(
-        f"[RESULT] "
-        f"records={len(differences)}"
+        f"[RESULT] records={len(differences)}"
     )
-
 
     return differences
 
@@ -889,101 +533,392 @@ def calculate_differences(
 # ============================================================
 
 def save_differences(
-
     differences
-
 ):
 
     DATA_DIR.mkdir(
-
         parents=True,
-
         exist_ok=True,
-
     )
 
-
     with open(
-
         DIFFERENCES_FILE,
-
         "w",
-
         encoding="utf-8-sig",
-
         newline="",
-
     ) as f:
 
         writer = csv.DictWriter(
-
             f,
-
             fieldnames=DIFFERENCE_FIELDS,
-
         )
 
-
         writer.writeheader()
-
 
         writer.writerows(
             differences
         )
 
-
     print(
-
         f"[SAVE] "
-
         f"{DIFFERENCES_FILE} "
-
         f"records={len(differences)}"
-
     )
 
 
 # ============================================================
-# Discord configuration
+# Build individual alert candidates
 # ============================================================
 
-def check_discord_config():
+def get_alert_candidates(
+    differences
+):
 
-    if not DISCORD_WEBHOOK_URL:
+    candidates = []
 
-        print(
-            "[DISCORD] "
-            "ERROR: Webhook URL is NOT configured."
+    for row in differences:
+
+        if row.get(
+            "alert_type",
+            ""
+        ):
+
+            candidates.append(
+                row
+            )
+
+    # --------------------------------------------------------
+    # 重要度順
+    #
+    # OI変化 + Volume変化 + Price変化
+    # --------------------------------------------------------
+
+    def score(row):
+
+        oi = abs(
+            number(
+                row.get(
+                    "open_interest_diff"
+                )
+            )
         )
 
-        return False
+        volume = abs(
+            number(
+                row.get(
+                    "volume_diff"
+                )
+            )
+        )
 
+        price = abs(
+            number(
+                row.get(
+                    "last_price_diff"
+                )
+            )
+        )
 
-    print(
-        "[DISCORD] "
-        "Webhook URL is configured."
+        return (
+            oi * 3
+            +
+            volume * 2
+            +
+            price / 100
+        )
+
+    candidates.sort(
+        key=score,
+        reverse=True,
     )
 
-
-    return True
+    return candidates
 
 
 # ============================================================
-# Send Discord message
+# Build flow candidates
+# ============================================================
+
+def get_flow_candidates(
+    differences
+):
+
+    candidates = []
+
+    for row in differences:
+
+        oi_diff = number(
+            row.get(
+                "open_interest_diff"
+            )
+        )
+
+        volume_diff = number(
+            row.get(
+                "volume_diff"
+            )
+        )
+
+        # ----------------------------------------------------
+        # OIもVolumeも動いていないものは除外
+        # ----------------------------------------------------
+
+        if (
+            abs(oi_diff)
+            < FLOW_OI_MIN
+            and
+            volume_diff
+            < FLOW_VOLUME_MIN
+        ):
+
+            continue
+
+        candidates.append(
+            row
+        )
+
+
+    # --------------------------------------------------------
+    # Flowの重要度
+    # --------------------------------------------------------
+
+    def score(row):
+
+        oi = abs(
+            number(
+                row.get(
+                    "open_interest_diff"
+                )
+            )
+        )
+
+        volume = max(
+            number(
+                row.get(
+                    "volume_diff"
+                )
+            ),
+            0
+        )
+
+        return (
+            oi * 3
+            +
+            volume * 2
+        )
+
+
+    candidates.sort(
+        key=score,
+        reverse=True,
+    )
+
+
+    return candidates[
+        :FLOW_MAX_ITEMS
+    ]
+
+
+# ============================================================
+# Build flow message
+# ============================================================
+
+def build_flow_message(
+    differences
+):
+
+    flow = get_flow_candidates(
+        differences
+    )
+
+    if not flow:
+
+        return None
+
+
+    # ========================================================
+    # Contract grouping
+    # ========================================================
+
+    grouped = {}
+
+    for row in flow:
+
+        contract = row.get(
+            "contract",
+            ""
+        )
+
+        option_type = row.get(
+            "option_type",
+            ""
+        )
+
+        if contract not in grouped:
+
+            grouped[contract] = {
+                "CALL": [],
+                "PUT": [],
+            }
+
+        grouped[
+            contract
+        ][
+            option_type
+        ].append(
+            row
+        )
+
+
+    # ========================================================
+    # Message
+    # ========================================================
+
+    lines = []
+
+    lines.append(
+        "🚨 **JPX OPTION FLOW**"
+    )
+
+    lines.append(
+        "━━━━━━━━━━━━━━━━"
+    )
+
+
+    for contract in sorted(
+        grouped.keys()
+    ):
+
+        lines.append(
+            f"**{contract}**"
+        )
+
+        for option_type in (
+            "CALL",
+            "PUT",
+        ):
+
+            rows = grouped[
+                contract
+            ][
+                option_type
+            ]
+
+            if not rows:
+                continue
+
+            lines.append(
+                f"**{option_type}**"
+            )
+
+            for row in rows:
+
+                strike = fmt(
+                    row.get(
+                        "strike"
+                    )
+                )
+
+                oi_diff = fmt_signed(
+                    row.get(
+                        "open_interest_diff"
+                    )
+                )
+
+                volume_diff = fmt_signed(
+                    row.get(
+                        "volume_diff"
+                    )
+                )
+
+                lines.append(
+                    f"`{strike:>7}` "
+                    f"OI {oi_diff} / "
+                    f"Vol {volume_diff}"
+                )
+
+        lines.append(
+            "━━━━━━━━━━━━━━━━"
+        )
+
+
+    return "\n".join(
+        lines
+    )
+
+
+# ============================================================
+# Build individual alert message
+# ============================================================
+
+def build_alert_message(
+    row
+):
+
+    contract = row.get(
+        "contract",
+        ""
+    )
+
+    option_type = row.get(
+        "option_type",
+        ""
+    )
+
+    strike = fmt(
+        row.get(
+            "strike"
+        )
+    )
+
+    oi_diff = fmt_signed(
+        row.get(
+            "open_interest_diff"
+        )
+    )
+
+    volume_diff = fmt_signed(
+        row.get(
+            "volume_diff"
+        )
+    )
+
+    price_diff = fmt_signed(
+        row.get(
+            "last_price_diff"
+        )
+    )
+
+    alert_type = row.get(
+        "alert_type",
+        ""
+    )
+
+
+    return (
+        "🚨 **JPX OPTION ALERT**\n"
+        f"**{contract} {option_type} {strike}**\n"
+        "\n"
+        f"OI: `{oi_diff}`\n"
+        f"Volume: `{volume_diff}`\n"
+        f"Price: `{price_diff}`\n"
+        f"Type: `{alert_type}`"
+    )
+
+
+# ============================================================
+# Send Discord
 # ============================================================
 
 def send_discord_message(
-
     message
-
 ):
 
     if not DISCORD_WEBHOOK_URL:
 
         print(
             "[DISCORD] "
-            "ERROR: "
-            "DISCORD_WEBHOOK_URL "
+            "ERROR: DISCORD_WEBHOOK_URL "
             "is not set."
         )
 
@@ -993,27 +928,17 @@ def send_discord_message(
     try:
 
         response = requests.post(
-
             DISCORD_WEBHOOK_URL,
-
             json={
-
-                "content":
-                    message
-
+                "content": message
             },
-
             timeout=15,
-
         )
 
 
         if response.status_code in (
-
             200,
-
             204,
-
         ):
 
             print(
@@ -1025,16 +950,13 @@ def send_discord_message(
 
 
         print(
-
-            f"[DISCORD] "
-
-            f"HTTP "
-            f"{response.status_code}: "
-
-            f"{response.text}"
-
+            f"[DISCORD] ERROR: "
+            f"HTTP {response.status_code}"
         )
 
+        print(
+            response.text
+        )
 
         return False
 
@@ -1042,569 +964,207 @@ def send_discord_message(
     except Exception as e:
 
         print(
-
-            f"[DISCORD] "
-            f"ERROR: {e}"
-
+            f"[DISCORD] ERROR: "
+            f"{e}"
         )
 
         return False
 
 
 # ============================================================
-# Alert label
+# Split Discord message
 # ============================================================
 
-def get_alert_label(
-    alert_type
+def split_message(
+    message,
+    max_length=DISCORD_MAX_LENGTH,
 ):
 
-    types = set(
+    if len(message) <= max_length:
 
-        alert_type.split(",")
-
-    )
-
-
-    if "NEW_POSITION" in types:
-
-        return (
-            "🟢 新規建玉候補"
-        )
+        return [
+            message
+        ]
 
 
-    if "CLOSE_POSITION" in types:
+    chunks = []
 
-        return (
-            "🔵 手仕舞い候補"
-        )
+    current = ""
 
-
-    if "VOLUME" in types:
-
-        return (
-            "🟡 出来高急増"
-        )
-
-
-    if "OI_INCREASE" in types:
-
-        return (
-            "🟢 OI増加"
-        )
-
-
-    if "OI_DECREASE" in types:
-
-        return (
-            "🔵 OI減少"
-        )
-
-
-    if "PRICE" in types:
-
-        return (
-            "🟠 価格急変"
-        )
-
-
-    return (
-        "📊 OPTION ALERT"
-    )
-
-
-# ============================================================
-# Build Discord message
-# ============================================================
-
-def build_discord_message(
-
-    difference
-
-):
-
-    contract = difference.get(
-        "contract",
-        "-"
-    )
-
-
-    option_type = difference.get(
-        "option_type",
-        "-"
-    )
-
-
-    strike = difference.get(
-        "strike",
-        "-"
-    )
-
-
-    oi_diff = number(
-        difference.get(
-            "open_interest_diff"
-        )
-    )
-
-
-    volume_diff = number(
-        difference.get(
-            "volume_diff"
-        )
-    )
-
-
-    price_diff = number(
-        difference.get(
-            "last_price_diff"
-        )
-    )
-
-
-    current_oi = number(
-        difference.get(
-            "current_open_interest"
-        )
-    )
-
-
-    current_volume = number(
-        difference.get(
-            "current_volume"
-        )
-    )
-
-
-    current_price = number(
-        difference.get(
-            "current_last_price"
-        )
-    )
-
-
-    alert_type = difference.get(
-        "alert_type",
-        ""
-    )
-
-
-    # ========================================================
-    # Alert label
-    # ========================================================
-
-    label = get_alert_label(
-        alert_type
-    )
-
-
-    # ========================================================
-    # Price direction
-    # ========================================================
-
-    if price_diff > 0:
-
-        price_icon = "📈"
-
-    elif price_diff < 0:
-
-        price_icon = "📉"
-
-    else:
-
-        price_icon = "➡️"
-
-
-    # ========================================================
-    # Interpretation
-    # ========================================================
-
-    interpretation = ""
-
-
-    if (
-        "NEW_POSITION"
-        in alert_type
+    for line in message.split(
+        "\n"
     ):
 
-        interpretation = (
+        if (
+            len(current)
+            +
+            len(line)
+            +
+            1
+            > max_length
+        ):
 
-            "\n"
-            "💡 **OI増加＋出来高増加**\n"
-            "→ 新規ポジション形成の可能性"
+            if current:
 
+                chunks.append(
+                    current
+                )
+
+            current = line
+
+        else:
+
+            if current:
+
+                current += "\n"
+
+            current += line
+
+
+    if current:
+
+        chunks.append(
+            current
         )
 
-
-    elif (
-        "CLOSE_POSITION"
-        in alert_type
-    ):
-
-        interpretation = (
-
-            "\n"
-            "💡 **OI減少＋出来高増加**\n"
-            "→ 手仕舞い・反対売買の可能性"
-
-        )
-
-
-    elif (
-        "VOLUME"
-        in alert_type
-    ):
-
-        interpretation = (
-
-            "\n"
-            "💡 出来高が大きく増加"
-
-        )
-
-
-    # ========================================================
-    # Message
-    # ========================================================
-
-    message = (
-
-        "🚨 **JPX OPTION ALERT**\n"
-
-        "\n"
-
-        f"{label}\n"
-
-        "\n"
-
-        f"**{contract} "
-        f"{option_type} "
-        f"{fmt(strike)}**\n"
-
-        "\n"
-
-        f"OI差分: "
-        f"**{fmt(oi_diff)}**\n"
-
-        f"現在OI: "
-        f"{fmt(current_oi)}\n"
-
-        "\n"
-
-        f"出来高差分: "
-        f"**{fmt(volume_diff)}**\n"
-
-        f"現在出来高: "
-        f"{fmt(current_volume)}\n"
-
-        "\n"
-
-        f"価格差分: "
-        f"{price_icon} "
-        f"**{fmt(price_diff)}**\n"
-
-        f"現在価格: "
-        f"{fmt(current_price)}\n"
-
-        f"{interpretation}"
-
-    )
-
-
-    return message
+    return chunks
 
 
 # ============================================================
-# Send alerts
+# Send flow alert
 # ============================================================
 
-def send_alerts(
-
+def send_flow_alert(
     differences
-
 ):
 
     print()
-
+    print(
+        "========================================"
+    )
+    print(
+        "JPX OPTION FLOW"
+    )
     print(
         "========================================"
     )
 
+
+    message = build_flow_message(
+        differences
+    )
+
+
+    if not message:
+
+        print(
+            "[FLOW] "
+            "No significant flow."
+        )
+
+        return
+
+
+    print(
+        message
+    )
+
+
+    chunks = split_message(
+        message
+    )
+
+
+    for chunk in chunks:
+
+        send_discord_message(
+            chunk
+        )
+
+        time.sleep(
+            0.5
+        )
+
+
+# ============================================================
+# Send individual alerts
+# ============================================================
+
+def send_individual_alerts(
+    differences
+):
+
+    candidates = get_alert_candidates(
+        differences
+    )
+
+
+    print()
+    print(
+        "========================================"
+    )
     print(
         "DISCORD ALERT"
     )
-
     print(
         "========================================"
     )
 
 
-    if not check_discord_config():
+    print(
+        f"Alert candidates: "
+        f"{len(candidates)}"
+    )
+
+
+    if not candidates:
 
         print(
             "[DISCORD] "
-            "Skipping notifications."
+            "No alert candidates."
         )
 
         return
 
 
-    # ========================================================
-    # Candidates
-    # ========================================================
-
-    alert_records = [
-
-        row
-
-        for row in differences
-
-        if row.get(
-            "alert_type",
-            ""
-        )
-
+    # 最大10件
+    candidates = candidates[
+        :10
     ]
 
 
-    print(
-
-        f"Alert candidates: "
-        f"{len(alert_records)}"
-
-    )
-
-
-    if not alert_records:
-
-        print(
-
-            "[DISCORD] "
-            "No alert candidates."
-
-        )
-
-        return
-
-
-    # ========================================================
-    # Priority
-    #
-    # NEW_POSITION
-    # CLOSE_POSITION
-    # VOLUME
-    # OI
-    # PRICE
-    # ========================================================
-
-    def priority(row):
-
-        alert_type = row.get(
-            "alert_type",
-            ""
-        )
-
-
-        if (
-            "NEW_POSITION"
-            in alert_type
-        ):
-
-            return 1
-
-
-        if (
-            "CLOSE_POSITION"
-            in alert_type
-        ):
-
-            return 2
-
-
-        if (
-            "VOLUME"
-            in alert_type
-        ):
-
-            return 3
-
-
-        if (
-            "OI_INCREASE"
-            in alert_type
-            or
-            "OI_DECREASE"
-            in alert_type
-        ):
-
-            return 4
-
-
-        if (
-            "PRICE"
-            in alert_type
-        ):
-
-            return 5
-
-
-        return 99
-
-
-    alert_records.sort(
-        key=priority
-    )
-
-
-    # ========================================================
-    # Limit
-    # ========================================================
-
-    if len(alert_records) > MAX_ALERTS:
-
-        print(
-
-            f"[DISCORD] "
-            f"Limiting alerts to "
-            f"{MAX_ALERTS}."
-
-        )
-
-
-        alert_records = (
-
-            alert_records[
-                :MAX_ALERTS
-            ]
-
-        )
-
-
-    # ========================================================
-    # Send
-    # ========================================================
-
-    for index, difference in enumerate(
-
-        alert_records,
-
+    for index, row in enumerate(
+        candidates,
         start=1,
-
     ):
 
         print()
+        print(
+            f"[ALERT {index}/"
+            f"{len(candidates)}]"
+        )
+
+
+        message = build_alert_message(
+            row
+        )
 
 
         print(
-
-            f"[ALERT "
-            f"{index}/"
-            f"{len(alert_records)}]"
-
+            message
         )
 
 
-        contract = difference.get(
-            "contract",
-            "-"
-        )
+        if send_discord_message(
+            message
+        ):
 
-
-        option_type = difference.get(
-            "option_type",
-            "-"
-        )
-
-
-        strike = difference.get(
-            "strike",
-            "-"
-        )
-
-
-        oi_diff = number(
-            difference.get(
-                "open_interest_diff"
+            print(
+                "[DISCORD] "
+                "Alert sent."
             )
-        )
 
-
-        volume_diff = number(
-            difference.get(
-                "volume_diff"
-            )
-        )
-
-
-        price_diff = number(
-            difference.get(
-                "last_price_diff"
-            )
-        )
-
-
-        alert_type = difference.get(
-            "alert_type",
-            ""
-        )
-
-
-        print(
-
-            f"{contract} "
-            f"{option_type} "
-            f"{fmt(strike)}"
-
-        )
-
-
-        print(
-
-            f"OI diff: "
-            f"{fmt(oi_diff)}"
-
-        )
-
-
-        print(
-
-            f"Volume diff: "
-            f"{fmt(volume_diff)}"
-
-        )
-
-
-        print(
-
-            f"Price diff: "
-            f"{fmt(price_diff)}"
-
-        )
-
-
-        print(
-
-            f"Alert type: "
-            f"{alert_type}"
-
-        )
-
-
-        message = (
-            build_discord_message(
-                difference
-            )
-        )
-
-
-        success = (
-            send_discord_message(
-                message
-            )
-        )
-
-
-        if not success:
+        else:
 
             print(
                 "[DISCORD] "
@@ -1612,85 +1172,9 @@ def send_alerts(
             )
 
 
-        if (
-
-            index
-            < len(alert_records)
-
-        ):
-
-            time.sleep(
-                DISCORD_INTERVAL
-            )
-
-
-# ============================================================
-# Save previous
-# ============================================================
-
-def save_previous(
-
-    current_records
-
-):
-
-    if not current_records:
-
-        print(
-            "[WARNING] "
-            "No records to save."
+        time.sleep(
+            0.5
         )
-
-        return
-
-
-    with open(
-
-        PREVIOUS_FILE,
-
-        "w",
-
-        encoding="utf-8-sig",
-
-        newline="",
-
-    ) as f:
-
-
-        fieldnames = list(
-
-            current_records[
-                0
-            ].keys()
-
-        )
-
-
-        writer = csv.DictWriter(
-
-            f,
-
-            fieldnames=fieldnames,
-
-        )
-
-
-        writer.writeheader()
-
-
-        writer.writerows(
-            current_records
-        )
-
-
-    print(
-
-        f"[SAVE] "
-        f"{PREVIOUS_FILE} "
-        f"records="
-        f"{len(current_records)}"
-
-    )
 
 
 # ============================================================
@@ -1700,26 +1184,23 @@ def save_previous(
 def main():
 
     print()
-
     print(
         "========================================"
     )
-
     print(
         "CALCULATE DIFFERENCES"
     )
-
     print(
         "========================================"
     )
 
 
     # ========================================================
-    # Current
+    # Load current
     # ========================================================
 
     current_records = load_csv(
-        CURRENT_FILE
+        LATEST_FILE
     )
 
 
@@ -1731,7 +1212,7 @@ def main():
 
 
     # ========================================================
-    # Previous
+    # Load previous
     # ========================================================
 
     previous_records = load_csv(
@@ -1739,67 +1220,61 @@ def main():
     )
 
 
-    # ========================================================
-    # First run
-    # ========================================================
+    # --------------------------------------------------------
+    # 初回実行
+    # --------------------------------------------------------
 
     if not previous_records:
 
         print()
-
         print(
-            "[INFO] "
-            "No previous.csv found."
+            "[FIRST RUN]"
         )
 
         print(
-            "[INFO] "
+            "No previous.csv."
+        )
+
+        print(
             "Creating baseline."
         )
 
 
+        # latest -> previous
         save_previous(
             current_records
         )
 
 
+        # 空の differences
         save_differences(
             []
         )
 
 
         print()
-
         print(
             "========================================"
         )
 
         print(
-            "BASELINE CREATED"
-        )
-
-        print(
-            "No Discord alert will be sent."
+            "FIRST RUN COMPLETE"
         )
 
         print(
             "========================================"
         )
-
 
         return
 
 
     # ========================================================
-    # Difference
+    # Calculate
     # ========================================================
 
     differences = calculate_differences(
-
         current_records,
-
         previous_records,
-
     )
 
 
@@ -1816,9 +1291,37 @@ def main():
     # Discord
     # ========================================================
 
-    send_alerts(
-        differences
-    )
+    if DISCORD_WEBHOOK_URL:
+
+        print()
+        print(
+            "[DISCORD] "
+            "Webhook URL is configured."
+        )
+
+        # ----------------------------------------------------
+        # まずFlow
+        # ----------------------------------------------------
+
+        send_flow_alert(
+            differences
+        )
+
+        # ----------------------------------------------------
+        # 個別アラート
+        # ----------------------------------------------------
+
+        send_individual_alerts(
+            differences
+        )
+
+    else:
+
+        print()
+        print(
+            "[DISCORD] "
+            "Webhook URL is NOT configured."
+        )
 
 
     # ========================================================
@@ -1831,11 +1334,10 @@ def main():
 
 
     # ========================================================
-    # Summary
+    # Complete
     # ========================================================
 
     print()
-
     print(
         "========================================"
     )
@@ -1859,98 +1361,59 @@ def main():
         f"{len(differences)}"
     )
 
-
-    alert_count = sum(
-
-        1
-
-        for row in differences
-
-        if row.get(
-            "alert_type",
-            ""
-        )
-
+    alert_candidates = get_alert_candidates(
+        differences
     )
 
-
-    new_position_count = sum(
-
-        1
-
-        for row in differences
-
-        if (
-            "NEW_POSITION"
-            in row.get(
-                "alert_type",
-                ""
-            )
-        )
-
+    flow_candidates = get_flow_candidates(
+        differences
     )
-
-
-    close_position_count = sum(
-
-        1
-
-        for row in differences
-
-        if (
-            "CLOSE_POSITION"
-            in row.get(
-                "alert_type",
-                ""
-            )
-        )
-
-    )
-
-
-    volume_count = sum(
-
-        1
-
-        for row in differences
-
-        if (
-            "VOLUME"
-            in row.get(
-                "alert_type",
-                ""
-            )
-        )
-
-    )
-
 
     print(
         f"Alert candidates: "
-        f"{alert_count}"
+        f"{len(alert_candidates)}"
     )
-
 
     print(
-        f"New position candidates: "
-        f"{new_position_count}"
+        f"Flow candidates: "
+        f"{len(flow_candidates)}"
     )
-
-
-    print(
-        f"Close position candidates: "
-        f"{close_position_count}"
-    )
-
-
-    print(
-        f"Volume alerts: "
-        f"{volume_count}"
-    )
-
 
     print(
         "========================================"
+    )
+
+
+# ============================================================
+# Save previous
+# ============================================================
+
+def save_previous(
+    records
+):
+
+    with open(
+        PREVIOUS_FILE,
+        "w",
+        encoding="utf-8-sig",
+        newline="",
+    ) as f:
+
+        writer = csv.DictWriter(
+            f,
+            fieldnames=records[0].keys()
+        )
+
+        writer.writeheader()
+
+        writer.writerows(
+            records
+        )
+
+    print(
+        f"[SAVE] "
+        f"{PREVIOUS_FILE} "
+        f"records={len(records)}"
     )
 
 
