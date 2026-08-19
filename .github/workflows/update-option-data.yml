@@ -75,6 +75,10 @@ jobs:
       # ======================================================
 
       - name: Get JPX option data
+
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+
         run: |
 
           echo "========================================"
@@ -89,6 +93,10 @@ jobs:
       # ======================================================
 
       - name: Calculate differences
+
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+
         run: |
 
           echo "========================================"
