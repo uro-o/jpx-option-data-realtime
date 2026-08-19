@@ -679,7 +679,10 @@ def parse_option_table(
         if len(cells) < 17:
             continue
 
+        # ====================================================
         # CALL
+        # ====================================================
+
         call_settlement = extract_number(
             cells[0].get_text(
                 " ",
@@ -729,7 +732,10 @@ def parse_option_table(
             cells[7]
         )
 
+        # ====================================================
         # STRIKE
+        # ====================================================
+
         strike_text = clean_text(
             cells[8].get_text(
                 " ",
@@ -752,7 +758,10 @@ def parse_option_table(
         if strike is None:
             continue
 
+        # ====================================================
         # PUT
+        # ====================================================
+
         put_last_price, put_trade_time = parse_price_and_time(
             cells[9]
         )
@@ -802,7 +811,12 @@ def parse_option_table(
             )
         )
 
+        # ====================================================
+        # Common
+        # ====================================================
+
         common = {
+
             "qri_update_time":
                 qri_update_time,
 
@@ -821,6 +835,10 @@ def parse_option_table(
             "strike":
                 strike,
         }
+
+        # ====================================================
+        # CALL record
+        # ====================================================
 
         call_record = {
             **common,
@@ -870,6 +888,10 @@ def parse_option_table(
             "trade_time":
                 call_trade_time,
         }
+
+        # ====================================================
+        # PUT record
+        # ====================================================
 
         put_record = {
             **common,
@@ -1063,7 +1085,10 @@ def save_latest(records):
         )
 
         writer.writeheader()
-        writer.writerows(records)
+
+        writer.writerows(
+            records
+        )
 
     print(
         f"[LATEST] "
@@ -1162,10 +1187,22 @@ def save_history(
             for row in reader:
 
                 key = (
-                    row.get("contract", ""),
-                    row.get("option_type", ""),
-                    row.get("strike", ""),
-                    row.get("qri_update_time", ""),
+                    row.get(
+                        "contract",
+                        ""
+                    ),
+                    row.get(
+                        "option_type",
+                        ""
+                    ),
+                    row.get(
+                        "strike",
+                        ""
+                    ),
+                    row.get(
+                        "qri_update_time",
+                        ""
+                    ),
                 )
 
                 existing_keys.add(
@@ -1239,11 +1276,16 @@ def number(value):
         return 0
 
     try:
+
         return float(
-            str(value).replace(",", "")
+            str(value).replace(
+                ",",
+                ""
+            )
         )
 
     except Exception:
+
         return 0
 
 
@@ -1272,9 +1314,18 @@ def calculate_differences(
     for row in previous_records:
 
         key = (
-            row.get("contract", ""),
-            row.get("option_type", ""),
-            row.get("strike", ""),
+            row.get(
+                "contract",
+                ""
+            ),
+            row.get(
+                "option_type",
+                ""
+            ),
+            row.get(
+                "strike",
+                ""
+            ),
         )
 
         previous_map[key] = row
@@ -1284,9 +1335,18 @@ def calculate_differences(
     for current in current_records:
 
         key = (
-            current.get("contract", ""),
-            current.get("option_type", ""),
-            current.get("strike", ""),
+            current.get(
+                "contract",
+                ""
+            ),
+            current.get(
+                "option_type",
+                ""
+            ),
+            current.get(
+                "strike",
+                ""
+            ),
         )
 
         previous = previous_map.get(
@@ -1296,6 +1356,10 @@ def calculate_differences(
         # 初回取得時は比較対象なし
         if previous is None:
             continue
+
+        # ====================================================
+        # OI
+        # ====================================================
 
         previous_oi = number(
             previous.get(
@@ -1309,6 +1373,15 @@ def calculate_differences(
             )
         )
 
+        oi_diff = (
+            current_oi -
+            previous_oi
+        )
+
+        # ====================================================
+        # Volume
+        # ====================================================
+
         previous_volume = number(
             previous.get(
                 "volume"
@@ -1320,6 +1393,15 @@ def calculate_differences(
                 "volume"
             )
         )
+
+        volume_diff = (
+            current_volume -
+            previous_volume
+        )
+
+        # ====================================================
+        # Last price
+        # ====================================================
 
         previous_price = number(
             previous.get(
@@ -1333,6 +1415,15 @@ def calculate_differences(
             )
         )
 
+        price_diff = (
+            current_price -
+            previous_price
+        )
+
+        # ====================================================
+        # Ask quantity
+        # ====================================================
+
         previous_ask_qty = number(
             previous.get(
                 "ask_quantity"
@@ -1344,6 +1435,15 @@ def calculate_differences(
                 "ask_quantity"
             )
         )
+
+        ask_qty_diff = (
+            current_ask_qty -
+            previous_ask_qty
+        )
+
+        # ====================================================
+        # Bid quantity
+        # ====================================================
 
         previous_bid_qty = number(
             previous.get(
@@ -1357,30 +1457,14 @@ def calculate_differences(
             )
         )
 
-        oi_diff = (
-            current_oi -
-            previous_oi
-        )
-
-        volume_diff = (
-            current_volume -
-            previous_volume
-        )
-
-        price_diff = (
-            current_price -
-            previous_price
-        )
-
-        ask_qty_diff = (
-            current_ask_qty -
-            previous_ask_qty
-        )
-
         bid_qty_diff = (
             current_bid_qty -
             previous_bid_qty
         )
+
+        # ====================================================
+        # Alert
+        # ====================================================
 
         alerts = []
 
@@ -1423,6 +1507,10 @@ def calculate_differences(
         alert_type = ",".join(
             alerts
         )
+
+        # ====================================================
+        # Difference record
+        # ====================================================
 
         differences.append({
 
@@ -1636,27 +1724,191 @@ def fmt(value):
         return str(value)
 
 
+# ============================================================
+# Build Discord message
+# ============================================================
+
 def build_discord_message(
     difference
 ):
 
-    contract = difference["contract"]
-
-    option_type = difference["option_type"]
-
-    strike = difference["strike"]
-
-    oi_diff = to_number(
-        difference["open_interest_diff"]
+    contract = difference.get(
+        "contract",
+        ""
     )
 
-    volume_diff = to_number(
-        difference["volume_diff"]
+    option_type = difference.get(
+        "option_type",
+        ""
     )
 
-    price_diff = to_number(
-        difference["last_price_diff"]
+    strike = difference.get(
+        "strike",
+        ""
     )
+
+    oi_diff = number(
+        difference.get(
+            "open_interest_diff"
+        )
+    )
+
+    volume_diff = number(
+        difference.get(
+            "volume_diff"
+        )
+    )
+
+    price_diff = number(
+        difference.get(
+            "last_price_diff"
+        )
+    )
+
+    ask_qty_diff = number(
+        difference.get(
+            "ask_quantity_diff"
+        )
+    )
+
+    bid_qty_diff = number(
+        difference.get(
+            "bid_quantity_diff"
+        )
+    )
+
+    alert_type = difference.get(
+        "alert_type",
+        ""
+    )
+
+    qri_update_time = difference.get(
+        "qri_update_time",
+        ""
+    )
+
+    collected_at = difference.get(
+        "collected_at",
+        ""
+    )
+
+    # ========================================================
+    # CALL / PUT
+    # ========================================================
+
+    if option_type == "CALL":
+
+        title = "🟢 CALL"
+
+    else:
+
+        title = "🔴 PUT"
+
+    # ========================================================
+    # Alert lines
+    # ========================================================
+
+    alert_lines = []
+
+    if "VOLUME" in alert_type:
+
+        alert_lines.append(
+            f"📊 出来高増加 : "
+            f"+{fmt(volume_diff)}"
+        )
+
+    if "OI_INCREASE" in alert_type:
+
+        alert_lines.append(
+            f"📈 建玉増加 : "
+            f"+{fmt(oi_diff)}"
+        )
+
+    if "OI_DECREASE" in alert_type:
+
+        alert_lines.append(
+            f"📉 建玉減少 : "
+            f"{fmt(oi_diff)}"
+        )
+
+    if "PRICE" in alert_type:
+
+        sign = (
+            "+"
+            if price_diff > 0
+            else ""
+        )
+
+        alert_lines.append(
+            f"💴 価格変化 : "
+            f"{sign}{fmt(price_diff)}"
+        )
+
+    # ========================================================
+    # Ask / Bid quantity
+    # ========================================================
+
+    if ask_qty_diff != 0:
+
+        sign = (
+            "+"
+            if ask_qty_diff > 0
+            else ""
+        )
+
+        alert_lines.append(
+            f"🔵 Ask数量 : "
+            f"{sign}{fmt(ask_qty_diff)}"
+        )
+
+    if bid_qty_diff != 0:
+
+        sign = (
+            "+"
+            if bid_qty_diff > 0
+            else ""
+        )
+
+        alert_lines.append(
+            f"🔴 Bid数量 : "
+            f"{sign}{fmt(bid_qty_diff)}"
+        )
+
+    # ========================================================
+    # Message
+    # ========================================================
+
+    message_lines = [
+
+        "🚨 **JPX OPTION ALERT**",
+
+        title,
+
+        f"限月 : **{contract}**",
+
+        f"Strike : **{fmt(strike)}**",
+
+        "",
+    ]
+
+    message_lines.extend(
+        alert_lines
+    )
+
+    message_lines.extend([
+
+        "",
+
+        f"QRI更新 : {qri_update_time}",
+
+        f"取得時刻 : {collected_at}",
+
+    ])
+
+    return "\n".join(
+        message_lines
+    )
+
 
 # ============================================================
 # Send alerts
@@ -1671,12 +1923,16 @@ def send_alerts(
         return
 
     alert_records = [
+
         row
+
         for row in differences
+
         if row.get(
             "alert_type",
             ""
         )
+
     ]
 
     print()
@@ -1704,9 +1960,9 @@ def send_alerts(
 
         return
 
-    # --------------------------------------------------------
-    # 通知が多すぎる場合に備えて最大20件
-    # --------------------------------------------------------
+    # ========================================================
+    # 最大20件
+    # ========================================================
 
     alert_records = alert_records[:20]
 
@@ -1717,14 +1973,17 @@ def send_alerts(
         )
 
         print()
-        print(message)
+        print(
+            message
+        )
 
         send_discord_message(
             message
         )
 
-        # Discordへの連続送信を少し間隔を空ける
-        time.sleep(0.5)
+        time.sleep(
+            0.5
+        )
 
 
 # ============================================================
@@ -1763,7 +2022,7 @@ def main():
     )
 
     # ========================================================
-    # 前回データを保存
+    # 前回データ
     # ========================================================
 
     previous_records = load_csv(
@@ -1889,13 +2148,17 @@ def main():
     # ========================================================
     # 差分計算
     #
-    # 最新データを書き換える前に計算する
+    # latest.csvを書き換える前に計算
     # ========================================================
 
     differences = calculate_differences(
         previous_records,
         all_records,
     )
+
+    # ========================================================
+    # differences.csv
+    # ========================================================
 
     save_differences(
         differences
@@ -1905,7 +2168,6 @@ def main():
     # Discord通知
     # ========================================================
 
-    # QRIの更新があった場合だけ通知
     if new_records:
 
         send_alerts(
