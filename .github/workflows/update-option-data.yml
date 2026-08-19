@@ -1,11 +1,17 @@
-name: Update JPX Option Data
+name: JPX Option Data
 
 on:
 
+  # ==========================================
   # 手動実行
+  # ==========================================
+
   workflow_dispatch:
 
+  # ==========================================
   # 月～金、24時間、1分ごと
+  # ==========================================
+
   schedule:
     - cron: "* * * * 1-5"
 
@@ -16,14 +22,13 @@ jobs:
 
     runs-on: ubuntu-latest
 
-    # GitHubへpushするために必要
     permissions:
       contents: write
 
     steps:
 
       # ==========================================
-      # GitHubリポジトリ取得
+      # GitHub repository checkout
       # ==========================================
 
       - name: Checkout repository
@@ -33,7 +38,7 @@ jobs:
 
 
       # ==========================================
-      # Pythonセットアップ
+      # Python setup
       # ==========================================
 
       - name: Setup Python
@@ -43,150 +48,262 @@ jobs:
 
 
       # ==========================================
-      # Pythonライブラリ
+      # Install Python libraries
       # ==========================================
 
       - name: Install dependencies
         run: |
+
           python -m pip install --upgrade pip
+
           pip install requests beautifulsoup4
 
 
       # ==========================================
-      # QRIデータ取得
+      # Get QRI option data
       # ==========================================
 
       - name: Run QRI data collector
         run: |
+
+          echo "========================================"
+          echo "GET JPX OPTION DATA"
+          echo "========================================"
+
           python get_option_data.py
 
 
       # ==========================================
-      # Data確認
+      # Calculate differences
       # ==========================================
 
-      - name: Check generated files
+      - name: Calculate differences
         run: |
+
           echo "========================================"
-          echo "Generated data files"
+          echo "CALCULATING DIFFERENCE"
+          echo "========================================"
+
+          python calculate_difference.py
+
+
+      # ==========================================
+      # Check generated data
+      # ==========================================
+
+      - name: Check data files
+        run: |
+
+          echo "========================================"
+          echo "DATA FILES"
           echo "========================================"
 
           if [ -d "data" ]; then
-            find data -type f -maxdepth 3 -print
+
+            echo "data directory exists"
+
+            find data \
+              -maxdepth 3 \
+              -type f \
+              -print
+
           else
-            echo "ERROR: data directory was not created"
+
+            echo "ERROR: data directory does not exist"
+
             exit 1
+
           fi
 
-          echo ""
-          echo "========================================"
-          echo "Data directory"
-          echo "========================================"
 
-          ls -lah data/
+          # ========================================
+          # latest.csv
+          # ========================================
 
           echo ""
           echo "========================================"
-          echo "History directory"
+          echo "LATEST"
+          echo "========================================"
+
+          if [ -f "data/latest.csv" ]; then
+
+            echo "latest.csv : OK"
+
+            wc -l data/latest.csv
+
+          else
+
+            echo "latest.csv : NOT FOUND"
+
+          fi
+
+
+          # ========================================
+          # differences.csv
+          # ========================================
+
+          echo ""
+          echo "========================================"
+          echo "DIFFERENCES"
+          echo "========================================"
+
+          if [ -f "data/differences.csv" ]; then
+
+            echo "differences.csv : OK"
+
+            wc -l data/differences.csv
+
+            echo ""
+            echo "First 10 lines:"
+            head -10 data/differences.csv
+
+          else
+
+            echo "differences.csv : NOT FOUND"
+
+            echo ""
+            echo "This can happen when there is"
+            echo "no previous QRI snapshot yet."
+
+          fi
+
+
+          # ========================================
+          # history
+          # ========================================
+
+          echo ""
+          echo "========================================"
+          echo "HISTORY"
           echo "========================================"
 
           if [ -d "data/history" ]; then
+
             ls -lah data/history/
+
           else
-            echo "History directory does not exist"
+
+            echo "history directory does not exist"
+
           fi
 
 
       # ==========================================
-      # Git設定
+      # Configure Git
       # ==========================================
 
       - name: Configure Git
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git config user.name \
+            "github-actions[bot]"
+
+          git config user.email \
+            "41898282+github-actions[bot]@users.noreply.github.com"
 
 
       # ==========================================
-      # DataをGitへ追加
+      # Git status before commit
+      # ==========================================
+
+      - name: Check Git status
+        run: |
+
+          echo "========================================"
+          echo "GIT STATUS"
+          echo "========================================"
+
+          git status --short
+
+
+      # ==========================================
+      # Add data files
+      # ==========================================
+
+      - name: Stage data files
+        run: |
+
+          echo "========================================"
+          echo "GIT ADD DATA"
+          echo "========================================"
+
+          git add data/
+
+
+          echo ""
+          echo "========================================"
+          echo "STAGED FILES"
+          echo "========================================"
+
+          git status --short
+
+
+      # ==========================================
+      # Commit and push
       # ==========================================
 
       - name: Commit and push data
         run: |
 
           echo "========================================"
-          echo "Git status before commit"
+          echo "COMMIT / PUSH"
           echo "========================================"
 
-          git status --short
 
-          echo ""
-          echo "========================================"
-          echo "Adding data files"
-          echo "========================================"
-
-          git add data/
-
-          echo ""
-          echo "========================================"
-          echo "Staged changes"
-          echo "========================================"
-
-          git status --short
-
-          # ========================================
-          # 変更がなければ終了
-          # ========================================
+          # ----------------------------------------
+          # Check whether there are changes
+          # ----------------------------------------
 
           if git diff --cached --quiet; then
 
             echo ""
-            echo "========================================"
-            echo "No data changes"
-            echo "========================================"
+            echo "NO DATA CHANGES"
+            echo "Nothing to commit."
 
             exit 0
 
           fi
 
-          # ========================================
+
+          # ----------------------------------------
           # Commit
-          # ========================================
+          # ----------------------------------------
+
+          git commit \
+            -m "Update JPX option data"
+
+
+          # ----------------------------------------
+          # Get latest main
+          # ----------------------------------------
 
           echo ""
-          echo "========================================"
-          echo "Commit"
-          echo "========================================"
+          echo "Pull latest main..."
 
-          git commit -m "Update JPX option data"
-
-
-          # ========================================
-          # 最新のmainを取得
-          # ========================================
-
-          echo ""
-          echo "========================================"
-          echo "Pull latest main"
-          echo "========================================"
-
-          git pull --rebase origin main
+          git pull \
+            --rebase \
+            origin main
 
 
-          # ========================================
+          # ----------------------------------------
           # Push
-          # ========================================
+          # ----------------------------------------
+
+          echo ""
+          echo "Push to GitHub..."
+
+          git push \
+            origin HEAD:main
+
 
           echo ""
           echo "========================================"
-          echo "Push to GitHub"
+          echo "PUSH COMPLETE"
           echo "========================================"
-
-          git push origin HEAD:main
 
 
       # ==========================================
-      # 最終確認
+      # Final summary
       # ==========================================
 
       - name: Final summary
@@ -197,24 +314,33 @@ jobs:
           echo "FINAL SUMMARY"
           echo "========================================"
 
-          echo "Repository:"
-          git remote get-url origin
+          echo ""
+
+          echo "Latest:"
+          ls -lh \
+            data/latest.csv \
+            2>/dev/null || true
+
 
           echo ""
-          echo "Latest data:"
-          if [ -f "data/latest.csv" ]; then
-            wc -l data/latest.csv
-          else
-            echo "data/latest.csv NOT FOUND"
-          fi
+
+          echo "Differences:"
+          ls -lh \
+            data/differences.csv \
+            2>/dev/null || true
+
 
           echo ""
-          echo "History files:"
-          if [ -d "data/history" ]; then
-            find data/history -type f -maxdepth 1 -print
-          else
-            echo "No history directory"
-          fi
+
+          echo "History:"
+          find data/history \
+            -maxdepth 1 \
+            -type f \
+            -print \
+            2>/dev/null || true
+
 
           echo ""
+          echo "========================================"
+          echo "WORKFLOW COMPLETE"
           echo "========================================"
