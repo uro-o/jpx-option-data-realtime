@@ -1636,147 +1636,27 @@ def fmt(value):
         return str(value)
 
 
-# ============================================================
-# Build Discord alert
-# ============================================================
-
 def build_discord_message(
     difference
 ):
 
-    contract = difference[
-        "contract"
-    ]
+    contract = difference["contract"]
 
-    option_type = difference[
-        "option_type"
-    ]
+    option_type = difference["option_type"]
 
-    strike = difference[
-        "strike"
-    ]
+    strike = difference["strike"]
 
-    oi_diff = number(
-        difference[
-            "open_interest_diff"
-        ]
+    oi_diff = to_number(
+        difference["open_interest_diff"]
     )
 
-    volume_diff = number(
-        difference[
-            "volume_diff"
-        )
-
-    price_diff = number(
-        difference[
-            "last_price_diff"
-        ]
+    volume_diff = to_number(
+        difference["volume_diff"]
     )
 
-    current_oi = number(
-        difference[
-            "current_open_interest"
-        ]
+    price_diff = to_number(
+        difference["last_price_diff"]
     )
-
-    current_volume = number(
-        difference[
-            "current_volume"
-        ]
-    )
-
-    current_price = number(
-        difference[
-            "current_last_price"
-        ]
-    )
-
-    alert_type = difference[
-        "alert_type"
-    ]
-
-    emoji = "🚨"
-
-    if option_type == "CALL":
-
-        option_emoji = "🟢"
-
-    else:
-
-        option_emoji = "🔴"
-
-    lines = []
-
-    lines.append(
-        f"{emoji} **日経225オプション 大口変化検知**"
-    )
-
-    lines.append("")
-
-    lines.append(
-        f"{option_emoji} **{option_type}**"
-    )
-
-    lines.append(
-        f"限月: **{contract}**"
-    )
-
-    lines.append(
-        f"権利行使価格: **{fmt(strike)}**"
-    )
-
-    lines.append("")
-
-    if "VOLUME" in alert_type:
-
-        lines.append(
-            f"📊 取引高増加: **+{fmt(volume_diff)}**"
-        )
-
-    if "OI_INCREASE" in alert_type:
-
-        lines.append(
-            f"📈 建玉増加: **+{fmt(oi_diff)}**"
-        )
-
-    if "OI_DECREASE" in alert_type:
-
-        lines.append(
-            f"📉 建玉減少: **{fmt(oi_diff)}**"
-        )
-
-    if "PRICE" in alert_type:
-
-        sign = "+" if price_diff > 0 else ""
-
-        lines.append(
-            f"💴 現在値変化: **{sign}{fmt(price_diff)}**"
-        )
-
-    lines.append("")
-
-    lines.append(
-        f"現在建玉: {fmt(current_oi)}"
-    )
-
-    lines.append(
-        f"現在取引高: {fmt(current_volume)}"
-    )
-
-    lines.append(
-        f"現在値: {fmt(current_price)}"
-    )
-
-    lines.append("")
-
-    lines.append(
-        f"QRI更新: {difference['qri_update_time']}"
-    )
-
-    return "\n".join(
-        lines
-    )
-
 
 # ============================================================
 # Send alerts
