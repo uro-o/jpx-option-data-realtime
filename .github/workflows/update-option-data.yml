@@ -1,0 +1,96 @@
+name: Update JPX Option Data
+
+on:
+  workflow_dispatch:
+
+  schedule:
+    # Every 5 minutes
+    # UTC 00:00-07:00
+    # JST 09:00-16:00
+    - cron: "*/5 0-6 * * 1-5"
+
+jobs:
+  update-option-data:
+
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+
+      # -----------------------------------------
+      # Checkout
+      # -----------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # -----------------------------------------
+      # Python
+      # -----------------------------------------
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # -----------------------------------------
+      # Install packages
+      # -----------------------------------------
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests beautifulsoup4
+
+      # -----------------------------------------
+      # Get QRI data
+      # -----------------------------------------
+      - name: Get QRI option data
+        run: |
+          python get_option_data.py
+
+      # -----------------------------------------
+      # Check result
+      # -----------------------------------------
+      - name: Check CSV
+        run: |
+          echo "========================================"
+          echo "CSV result"
+          echo "========================================"
+
+          ls -lh data/
+
+          echo ""
+          echo "Number of lines:"
+          wc -l data/latest.csv
+
+          echo ""
+          echo "First 10 lines:"
+          head -10 data/latest.csv
+
+      # -----------------------------------------
+      # Git config
+      # -----------------------------------------
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      # -----------------------------------------
+      # Commit
+      # -----------------------------------------
+      - name: Commit updated data
+        run: |
+          git add data/latest.csv
+
+          if git diff --cached --quiet; then
+            echo "No changes detected."
+          else
+            git commit -m "Update JPX option data"
+          fi
+
+      # -----------------------------------------
+      # Push
+      # -----------------------------------------
+      - name: Push changes
+        run: |
+          git push
