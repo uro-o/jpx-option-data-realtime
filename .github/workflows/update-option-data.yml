@@ -1,8 +1,8 @@
-name: Update JPX Option Data Realtime
+name: Debug JPX Option Data
 
 on:
 
-  # GitHub画面から手動実行
+  # 手動実行
   workflow_dispatch:
 
   # 月～金、24時間、1分ごと
@@ -12,12 +12,9 @@ on:
 
 jobs:
 
-  update-option-data:
+  debug-qri:
 
     runs-on: ubuntu-latest
-
-    permissions:
-      contents: write
 
     steps:
 
@@ -35,116 +32,24 @@ jobs:
 
       - name: Setup Python
         uses: actions/setup-python@v5
-
         with:
           python-version: "3.12"
 
 
       # ==========================================
-      # ライブラリインストール
+      # Pythonライブラリ
       # ==========================================
 
       - name: Install dependencies
         run: |
-
           python -m pip install --upgrade pip
-
-          pip install \
-            requests \
-            beautifulsoup4
+          pip install requests beautifulsoup4
 
 
       # ==========================================
-      # QRIデータ取得
+      # QRIアクセスデバッグ
       # ==========================================
 
-      - name: Get QRI option data
+      - name: Run QRI debug
         run: |
-
           python get_option_data.py
-
-
-      # ==========================================
-      # データ確認
-      # ==========================================
-
-      - name: Check data
-        run: |
-
-          echo "========================================"
-          echo "Data files"
-          echo "========================================"
-
-          find data \
-            -maxdepth 2 \
-            -type f \
-            -print
-
-          echo ""
-
-          echo "========================================"
-          echo "Latest CSV"
-          echo "========================================"
-
-          if [ -f data/latest.csv ]; then
-
-            echo "File exists."
-
-            wc -l data/latest.csv
-
-            echo ""
-
-            head -5 data/latest.csv
-
-          else
-
-            echo "latest.csv not found."
-
-            exit 1
-
-          fi
-
-
-      # ==========================================
-      # Git設定
-      # ==========================================
-
-      - name: Configure Git
-        run: |
-
-          git config user.name \
-            "github-actions[bot]"
-
-          git config user.email \
-            "41898282+github-actions[bot]@users.noreply.github.com"
-
-
-      # ==========================================
-      # データをCommit
-      # ==========================================
-
-      - name: Commit updated data
-        run: |
-
-          git add data/
-
-          if git diff --cached --quiet; then
-
-            echo "No data changes."
-
-          else
-
-            git commit \
-              -m "Update JPX option data"
-
-          fi
-
-
-      # ==========================================
-      # GitHubへPush
-      # ==========================================
-
-      - name: Push changes
-        run: |
-
-          git push
