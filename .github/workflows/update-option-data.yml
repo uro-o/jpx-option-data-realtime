@@ -1,17 +1,11 @@
-name: JPX Option Data
+name: JPX Option Data Realtime
 
 on:
 
-  # ==========================================
   # 手動実行
-  # ==========================================
-
   workflow_dispatch:
 
-  # ==========================================
   # 月～金、24時間、1分ごと
-  # ==========================================
-
   schedule:
     - cron: "* * * * 1-5"
 
@@ -22,14 +16,11 @@ jobs:
 
     runs-on: ubuntu-latest
 
-    permissions:
-      contents: write
-
     steps:
 
-      # ==========================================
-      # GitHub repository checkout
-      # ==========================================
+      # =====================================================
+      # GitHub Repository
+      # =====================================================
 
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -37,9 +28,9 @@ jobs:
           fetch-depth: 0
 
 
-      # ==========================================
-      # Python setup
-      # ==========================================
+      # =====================================================
+      # Python
+      # =====================================================
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -47,25 +38,22 @@ jobs:
           python-version: "3.12"
 
 
-      # ==========================================
-      # Install Python libraries
-      # ==========================================
+      # =====================================================
+      # Install libraries
+      # =====================================================
 
       - name: Install dependencies
         run: |
-
           python -m pip install --upgrade pip
-
           pip install requests beautifulsoup4
 
 
-      # ==========================================
+      # =====================================================
       # Get QRI option data
-      # ==========================================
+      # =====================================================
 
-      - name: Run QRI data collector
+      - name: Get option data
         run: |
-
           echo "========================================"
           echo "GET JPX OPTION DATA"
           echo "========================================"
@@ -73,13 +61,25 @@ jobs:
           python get_option_data.py
 
 
-      # ==========================================
+      # =====================================================
+      # Check data files
+      # =====================================================
+
+      - name: Check data files
+        run: |
+          echo "========================================"
+          echo "DATA FILES"
+          echo "========================================"
+
+          find data -maxdepth 3 -type f -print || true
+
+
+      # =====================================================
       # Calculate differences
-      # ==========================================
+      # =====================================================
 
       - name: Calculate differences
         run: |
-
           echo "========================================"
           echo "CALCULATING DIFFERENCE"
           echo "========================================"
@@ -87,128 +87,47 @@ jobs:
           python calculate_difference.py
 
 
-      # ==========================================
-      # Check generated data
-      # ==========================================
+      # =====================================================
+      # Check differences.csv
+      # =====================================================
 
-      - name: Check data files
+      - name: Check differences
         run: |
-
-          echo "========================================"
-          echo "DATA FILES"
-          echo "========================================"
-
-          if [ -d "data" ]; then
-
-            echo "data directory exists"
-
-            find data \
-              -maxdepth 3 \
-              -type f \
-              -print
-
-          else
-
-            echo "ERROR: data directory does not exist"
-
-            exit 1
-
-          fi
-
-
-          # ========================================
-          # latest.csv
-          # ========================================
-
-          echo ""
-          echo "========================================"
-          echo "LATEST"
-          echo "========================================"
-
-          if [ -f "data/latest.csv" ]; then
-
-            echo "latest.csv : OK"
-
-            wc -l data/latest.csv
-
-          else
-
-            echo "latest.csv : NOT FOUND"
-
-          fi
-
-
-          # ========================================
-          # differences.csv
-          # ========================================
-
-          echo ""
           echo "========================================"
           echo "DIFFERENCES"
           echo "========================================"
 
-          if [ -f "data/differences.csv" ]; then
-
-            echo "differences.csv : OK"
-
-            wc -l data/differences.csv
-
-            echo ""
-            echo "First 10 lines:"
-            head -10 data/differences.csv
-
+          if [ -f data/differences.csv ]; then
+            echo "differences.csv found"
+            echo "----------------------------------------"
+            head -50 data/differences.csv
           else
-
-            echo "differences.csv : NOT FOUND"
-
-            echo ""
-            echo "This can happen when there is"
-            echo "no previous QRI snapshot yet."
-
+            echo "differences.csv not found"
           fi
 
 
-          # ========================================
-          # history
-          # ========================================
+      # =====================================================
+      # Discord notification
+      # =====================================================
 
-          echo ""
-          echo "========================================"
-          echo "HISTORY"
-          echo "========================================"
-
-          if [ -d "data/history" ]; then
-
-            ls -lah data/history/
-
-          else
-
-            echo "history directory does not exist"
-
-          fi
-
-
-      # ==========================================
-      # Configure Git
-      # ==========================================
-
-      - name: Configure Git
+      - name: Send Discord notification
+        if: success()
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
+          echo "========================================"
+          echo "DISCORD NOTIFICATION"
+          echo "========================================"
 
-          git config user.name \
-            "github-actions[bot]"
-
-          git config user.email \
-            "41898282+github-actions[bot]@users.noreply.github.com"
+          python notify_discord.py
 
 
-      # ==========================================
-      # Git status before commit
-      # ==========================================
+      # =====================================================
+      # Git status
+      # =====================================================
 
       - name: Check Git status
         run: |
-
           echo "========================================"
           echo "GIT STATUS"
           echo "========================================"
@@ -216,131 +135,36 @@ jobs:
           git status --short
 
 
-      # ==========================================
-      # Add data files
-      # ==========================================
+      # =====================================================
+      # Commit data
+      # =====================================================
 
-      - name: Stage data files
+      - name: Commit data
         run: |
 
-          echo "========================================"
-          echo "GIT ADD DATA"
-          echo "========================================"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           git add data/
 
-
-          echo ""
-          echo "========================================"
-          echo "STAGED FILES"
-          echo "========================================"
-
-          git status --short
-
-
-      # ==========================================
-      # Commit and push
-      # ==========================================
-
-      - name: Commit and push data
-        run: |
-
-          echo "========================================"
-          echo "COMMIT / PUSH"
-          echo "========================================"
-
-
-          # ----------------------------------------
-          # Check whether there are changes
-          # ----------------------------------------
-
           if git diff --cached --quiet; then
 
-            echo ""
-            echo "NO DATA CHANGES"
-            echo "Nothing to commit."
+            echo "No changes to commit."
 
-            exit 0
+          else
+
+            git commit -m "Update JPX option data"
 
           fi
 
 
-          # ----------------------------------------
-          # Commit
-          # ----------------------------------------
+      # =====================================================
+      # Push to GitHub
+      # =====================================================
 
-          git commit \
-            -m "Update JPX option data"
-
-
-          # ----------------------------------------
-          # Get latest main
-          # ----------------------------------------
-
-          echo ""
-          echo "Pull latest main..."
-
-          git pull \
-            --rebase \
-            origin main
-
-
-          # ----------------------------------------
-          # Push
-          # ----------------------------------------
-
-          echo ""
-          echo "Push to GitHub..."
-
-          git push \
-            origin HEAD:main
-
-
-          echo ""
-          echo "========================================"
-          echo "PUSH COMPLETE"
-          echo "========================================"
-
-
-      # ==========================================
-      # Final summary
-      # ==========================================
-
-      - name: Final summary
+      - name: Push data
         run: |
 
-          echo ""
-          echo "========================================"
-          echo "FINAL SUMMARY"
-          echo "========================================"
+          git pull --rebase origin main
 
-          echo ""
-
-          echo "Latest:"
-          ls -lh \
-            data/latest.csv \
-            2>/dev/null || true
-
-
-          echo ""
-
-          echo "Differences:"
-          ls -lh \
-            data/differences.csv \
-            2>/dev/null || true
-
-
-          echo ""
-
-          echo "History:"
-          find data/history \
-            -maxdepth 1 \
-            -type f \
-            -print \
-            2>/dev/null || true
-
-
-          echo ""
-          echo "========================================"
-          echo "WORKFLOW COMPLETE"
-          echo "========================================"
+          git push origin main
