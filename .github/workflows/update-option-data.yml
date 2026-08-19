@@ -1,4 +1,9 @@
-name: JPX Option Data Realtime
+name: Update JPX Option Data
+
+
+# ============================================================
+# Trigger
+# ============================================================
 
 on:
 
@@ -10,50 +15,68 @@ on:
     - cron: "* * * * 1-5"
 
 
+# ============================================================
+# GitHub Actions permissions
+# ============================================================
+
+permissions:
+  contents: write
+
+
+# ============================================================
+# Job
+# ============================================================
+
 jobs:
 
   update-option-data:
 
     runs-on: ubuntu-latest
 
+
     steps:
 
-      # =====================================================
-      # GitHub Repository
-      # =====================================================
+      # ======================================================
+      # Checkout repository
+      # ======================================================
 
       - name: Checkout repository
         uses: actions/checkout@v4
+
         with:
           fetch-depth: 0
 
 
-      # =====================================================
-      # Python
-      # =====================================================
+      # ======================================================
+      # Setup Python
+      # ======================================================
 
       - name: Setup Python
         uses: actions/setup-python@v5
+
         with:
           python-version: "3.12"
 
 
-      # =====================================================
-      # Install libraries
-      # =====================================================
+      # ======================================================
+      # Install Python packages
+      # ======================================================
 
       - name: Install dependencies
         run: |
+
           python -m pip install --upgrade pip
+
           pip install requests beautifulsoup4
 
 
-      # =====================================================
-      # Get QRI option data
-      # =====================================================
+      # ======================================================
+      # Get JPX option data
+      # ======================================================
 
-      - name: Get option data
+      - name: Get JPX option data
         run: |
+
           echo "========================================"
           echo "GET JPX OPTION DATA"
           echo "========================================"
@@ -61,73 +84,45 @@ jobs:
           python get_option_data.py
 
 
-      # =====================================================
-      # Check data files
-      # =====================================================
-
-      - name: Check data files
-        run: |
-          echo "========================================"
-          echo "DATA FILES"
-          echo "========================================"
-
-          find data -maxdepth 3 -type f -print || true
-
-
-      # =====================================================
+      # ======================================================
       # Calculate differences
-      # =====================================================
+      # ======================================================
 
       - name: Calculate differences
         run: |
+
           echo "========================================"
-          echo "CALCULATING DIFFERENCE"
+          echo "CALCULATE DIFFERENCES"
           echo "========================================"
 
           python calculate_difference.py
 
 
-      # =====================================================
-      # Check differences.csv
-      # =====================================================
+      # ======================================================
+      # Check generated files
+      # ======================================================
 
-      - name: Check differences
+      - name: Check data files
         run: |
+
           echo "========================================"
-          echo "DIFFERENCES"
+          echo "DATA FILES"
           echo "========================================"
 
-          if [ -f data/differences.csv ]; then
-            echo "differences.csv found"
-            echo "----------------------------------------"
-            head -50 data/differences.csv
+          echo ""
+
+          if [ -d "data" ]; then
+
+            find data -maxdepth 2 -type f -print | sort
+
           else
-            echo "differences.csv not found"
+
+            echo "data directory does not exist"
+
           fi
 
+          echo ""
 
-      # =====================================================
-      # Discord notification
-      # =====================================================
-
-      - name: Send Discord notification
-        if: success()
-        env:
-          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-        run: |
-          echo "========================================"
-          echo "DISCORD NOTIFICATION"
-          echo "========================================"
-
-          python notify_discord.py
-
-
-      # =====================================================
-      # Git status
-      # =====================================================
-
-      - name: Check Git status
-        run: |
           echo "========================================"
           echo "GIT STATUS"
           echo "========================================"
@@ -135,36 +130,86 @@ jobs:
           git status --short
 
 
-      # =====================================================
-      # Commit data
-      # =====================================================
+      # ======================================================
+      # Commit and push
+      # ======================================================
 
-      - name: Commit data
+      - name: Commit and push
         run: |
 
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          echo "========================================"
+          echo "COMMIT AND PUSH"
+          echo "========================================"
 
+          # Git user
+          git config user.name "github-actions[bot]"
+
+          git config user.email \
+            "41898282+github-actions[bot]@users.noreply.github.com"
+
+
+          # Add generated data
           git add data/
 
+
+          # Check whether there are changes
           if git diff --cached --quiet; then
 
+            echo ""
             echo "No changes to commit."
+            echo ""
 
           else
 
+            echo ""
+            echo "Changes detected."
+            echo ""
+
+            git status --short
+
+            echo ""
+
+            # Commit
             git commit -m "Update JPX option data"
+
+
+            # Push
+            echo ""
+            echo "Pushing to main..."
+            echo ""
+
+            git push origin HEAD:main
+
+            echo ""
+            echo "Push completed."
+            echo ""
 
           fi
 
 
-      # =====================================================
-      # Push to GitHub
-      # =====================================================
+      # ======================================================
+      # Finish
+      # ======================================================
 
-      - name: Push data
+      - name: Finished
         run: |
 
-          git pull --rebase origin main
+          echo ""
+          echo "========================================"
+          echo "JPX OPTION DATA UPDATE FINISHED"
+          echo "========================================"
 
-          git push origin main
+          echo "Time:"
+          date
+
+          echo ""
+
+          echo "Repository:"
+          echo "${GITHUB_REPOSITORY}"
+
+          echo ""
+
+          echo "Branch:"
+          echo "${GITHUB_REF_NAME}"
+
+          echo "========================================"
