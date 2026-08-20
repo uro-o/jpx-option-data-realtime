@@ -72,15 +72,30 @@ MAX_ALERTS = 10
 
 # ------------------------------------------------------------
 # 同じオプションの再通知を抑制する時間
-#
-# 例：
-# 15:01に通知
-# 15:02にまた条件を満たしても通知しない
-#
-# 15分後なら再通知可能
 # ------------------------------------------------------------
 
 ALERT_COOLDOWN_MINUTES = 15
+
+
+# ============================================================
+# 日経225オプション取引単位
+# ============================================================
+
+# 日経225オプションは
+#
+# プレミアム × 1,000円
+#
+# を1枚あたりの概算取引金額として使用
+#
+# 例：
+# プレミアム 2,000円 × 1,000円
+# = 1枚あたり約200万円
+#
+# 100枚なら
+# 約2億円
+# ------------------------------------------------------------
+
+OPTION_MULTIPLIER = 1000
 
 
 # ============================================================
@@ -108,6 +123,8 @@ DIFFERENCE_FIELDS = [
     "current_last_price",
     "last_price_diff",
 
+    "estimated_trade_value",
+
     "previous_ask_quantity",
     "current_ask_quantity",
     "ask_quantity_diff",
@@ -117,6 +134,8 @@ DIFFERENCE_FIELDS = [
     "bid_quantity_diff",
 
     "alert_type",
+
+    "volume_level",
 ]
 
 
@@ -200,6 +219,146 @@ def fmt_signed(value):
 
 
 # ============================================================
+# Format yen amount
+# ============================================================
+
+def fmt_money(value):
+
+    try:
+
+        value = float(value)
+
+    except Exception:
+
+        return "-"
+
+
+    absolute = abs(value)
+
+
+    if absolute >= 100_000_000:
+
+        return (
+            f"{value / 100_000_000:.2f}億円"
+        )
+
+    if absolute >= 10_000_000:
+
+        return (
+            f"{value / 10_000_000:.1f}千万円"
+        )
+
+    if absolute >= 1_000_000:
+
+        return (
+            f"{value / 1_000_000:.1f}百万円"
+        )
+
+    if absolute >= 10_000:
+
+        return (
+            f"{value / 10_000:.1f}万円"
+        )
+
+    return f"{value:,.0f}円"
+
+
+# ============================================================
+# Volume level
+# ============================================================
+
+def get_volume_level(volume_diff):
+
+    volume = max(
+        0,
+        number(volume_diff)
+    )
+
+
+    if volume >= 500:
+
+        return "🚨 特大"
+
+
+    if volume >= 100:
+
+        return "🔥 かなり大"
+
+
+    if volume >= 50:
+
+        return "🟠 大"
+
+
+    if volume >= 10:
+
+        return "🟡 中"
+
+
+    if volume >= 1:
+
+        return "🟢 小"
+
+
+    return "⚪ なし"
+
+
+# ============================================================
+# Volume explanation
+# ============================================================
+
+def get_volume_explanation(volume_diff):
+
+    volume = max(
+        0,
+        number(volume_diff)
+    )
+
+
+    if volume >= 500:
+
+        return (
+            "非常に大きな取引量です。"
+            "市場参加者の強い関心が集まっている可能性があります。"
+        )
+
+
+    if volume >= 100:
+
+        return (
+            "かなり大きな取引量です。"
+            "この価格帯でまとまった取引が発生しています。"
+        )
+
+
+    if volume >= 50:
+
+        return (
+            "比較的大きな取引量です。"
+            "通常より強い売買が入っている可能性があります。"
+        )
+
+
+    if volume >= 10:
+
+        return (
+            "一定量の取引が発生しています。"
+        )
+
+
+    if volume >= 1:
+
+        return (
+            "少量の新しい取引を確認しました。"
+        )
+
+
+    return (
+        "今回の更新では新しい取引は確認されていません。"
+    )
+
+
+# ============================================================
 # Load CSV
 # ============================================================
 
@@ -212,6 +371,7 @@ def load_csv(path):
         )
 
         return []
+
 
     try:
 
@@ -226,12 +386,14 @@ def load_csv(path):
                 csv.DictReader(f)
             )
 
+
         print(
             f"[LOAD] {path} "
             f"records={len(rows)}"
         )
 
         return rows
+
 
     except Exception as e:
 
@@ -256,6 +418,7 @@ def save_differences(
         exist_ok=True,
     )
 
+
     with open(
         DIFFERENCES_FILE,
         "w",
@@ -274,6 +437,7 @@ def save_differences(
             differences
         )
 
+
     print(
         f"[SAVE] "
         f"{DIFFERENCES_FILE} "
@@ -291,15 +455,19 @@ def calculate_differences(
 ):
 
     print()
+
     print(
         "========================================"
     )
+
     print(
         "CALCULATING DIFFERENCE"
     )
+
     print(
         "========================================"
     )
+
 
     print(
         f"[CURRENT] "
@@ -318,9 +486,11 @@ def calculate_differences(
 
     previous_map = {}
 
+
     for row in previous_records:
 
         key = (
+
             row.get(
                 "contract",
                 ""
@@ -337,6 +507,7 @@ def calculate_differences(
             ),
         )
 
+
         previous_map[key] = row
 
 
@@ -350,6 +521,7 @@ def calculate_differences(
     for current in current_records:
 
         key = (
+
             current.get(
                 "contract",
                 ""
@@ -373,7 +545,7 @@ def calculate_differences(
 
 
         # ----------------------------------------------------
-        # 初回取得など、比較対象がない場合
+        # 比較対象がない場合
         # ----------------------------------------------------
 
         if previous is None:
@@ -391,11 +563,13 @@ def calculate_differences(
             )
         )
 
+
         current_oi = number(
             current.get(
                 "open_interest"
             )
         )
+
 
         oi_diff = (
             current_oi -
@@ -413,11 +587,13 @@ def calculate_differences(
             )
         )
 
+
         current_volume = number(
             current.get(
                 "volume"
             )
         )
+
 
         volume_diff = (
             current_volume -
@@ -435,11 +611,13 @@ def calculate_differences(
             )
         )
 
+
         current_price = number(
             current.get(
                 "last_price"
             )
         )
+
 
         price_diff = (
             current_price -
@@ -457,11 +635,13 @@ def calculate_differences(
             )
         )
 
+
         current_ask_qty = number(
             current.get(
                 "ask_quantity"
             )
         )
+
 
         ask_qty_diff = (
             current_ask_qty -
@@ -479,15 +659,44 @@ def calculate_differences(
             )
         )
 
+
         current_bid_qty = number(
             current.get(
                 "bid_quantity"
             )
         )
 
+
         bid_qty_diff = (
             current_bid_qty -
             previous_bid_qty
+        )
+
+
+        # ----------------------------------------------------
+        # 概算取引金額
+        #
+        # 出来高増加枚数 × 現在プレミアム × 1,000円
+        # ----------------------------------------------------
+
+        estimated_trade_value = (
+            max(
+                0,
+                volume_diff
+            )
+            *
+            current_price
+            *
+            OPTION_MULTIPLIER
+        )
+
+
+        # ----------------------------------------------------
+        # Volume level
+        # ----------------------------------------------------
+
+        volume_level = get_volume_level(
+            volume_diff
         )
 
 
@@ -544,7 +753,7 @@ def calculate_differences(
 
 
         # ----------------------------------------------------
-        # Save difference
+        # Save
         # ----------------------------------------------------
 
         differences.append({
@@ -606,6 +815,9 @@ def calculate_differences(
             "last_price_diff":
                 price_diff,
 
+            "estimated_trade_value":
+                estimated_trade_value,
+
             "previous_ask_quantity":
                 previous_ask_qty,
 
@@ -626,6 +838,9 @@ def calculate_differences(
 
             "alert_type":
                 alert_type,
+
+            "volume_level":
+                volume_level,
         })
 
 
@@ -633,6 +848,7 @@ def calculate_differences(
         f"[RESULT] "
         f"records={len(differences)}"
     )
+
 
     return differences
 
@@ -658,6 +874,7 @@ def load_alert_history():
 
             data = json.load(f)
 
+
         if isinstance(
             data,
             dict
@@ -665,7 +882,9 @@ def load_alert_history():
 
             return data
 
+
         return {}
+
 
     except Exception as e:
 
@@ -689,6 +908,7 @@ def save_alert_history(
         parents=True,
         exist_ok=True,
     )
+
 
     with open(
         ALERT_HISTORY_FILE,
@@ -732,6 +952,7 @@ def is_in_cooldown(
         key
     )
 
+
     if not last_time:
 
         return False
@@ -749,6 +970,7 @@ def is_in_cooldown(
 
 
     current_timestamp = time.time()
+
 
     elapsed = (
         current_timestamp -
@@ -779,20 +1001,22 @@ def option_explanation(
     if option_type == "CALL":
 
         return (
-            "CALLは「上昇した場合に利益を得やすい権利」です。"
+            "CALL：日経平均が上昇すると価値が上がりやすいオプション"
         )
+
 
     if option_type == "PUT":
 
         return (
-            "PUTは「下落した場合に利益を得やすい権利」です。"
+            "PUT：日経平均が下落すると価値が上がりやすいオプション"
         )
+
 
     return ""
 
 
 # ============================================================
-# Build alert message
+# Build Discord message
 # ============================================================
 
 def build_discord_message(
@@ -804,10 +1028,12 @@ def build_discord_message(
         ""
     )
 
+
     option_type = difference.get(
         "option_type",
         ""
     )
+
 
     strike = difference.get(
         "strike",
@@ -821,15 +1047,31 @@ def build_discord_message(
         )
     )
 
+
     volume_diff = number(
         difference.get(
             "volume_diff"
         )
     )
 
+
     price_diff = number(
         difference.get(
             "last_price_diff"
+        )
+    )
+
+
+    current_price = number(
+        difference.get(
+            "current_last_price"
+        )
+    )
+
+
+    estimated_trade_value = number(
+        difference.get(
+            "estimated_trade_value"
         )
     )
 
@@ -840,8 +1082,14 @@ def build_discord_message(
     )
 
 
+    volume_level = difference.get(
+        "volume_level",
+        get_volume_level(volume_diff)
+    )
+
+
     # --------------------------------------------------------
-    # Determine title
+    # Title
     # --------------------------------------------------------
 
     if (
@@ -850,7 +1098,7 @@ def build_discord_message(
     ):
 
         title = (
-            "🔥 大きな建玉増加を検知"
+            "🔥 建玉が大きく増加"
         )
 
     elif (
@@ -859,7 +1107,7 @@ def build_discord_message(
     ):
 
         title = (
-            "⚠️ 大きな建玉減少を検知"
+            "⚠️ 建玉が大きく減少"
         )
 
     elif (
@@ -888,7 +1136,7 @@ def build_discord_message(
 
 
     # --------------------------------------------------------
-    # Contract label
+    # Contract
     # --------------------------------------------------------
 
     contract_label = (
@@ -897,16 +1145,18 @@ def build_discord_message(
 
 
     # --------------------------------------------------------
-    # Direction
+    # Price direction
     # --------------------------------------------------------
 
     if price_diff > 0:
 
         price_direction = "上昇"
 
+
     elif price_diff < 0:
 
         price_direction = "下落"
+
 
     else:
 
@@ -914,24 +1164,62 @@ def build_discord_message(
 
 
     # --------------------------------------------------------
-    # Main message
+    # Message
     # --------------------------------------------------------
 
     message = []
+
 
     message.append(
         f"**{title}**"
     )
 
+
     message.append("")
 
-    message.append(
-        f"【{contract_label} {option_type}】"
-    )
 
     message.append(
-        f"権利行使価格：**{fmt(strike)}円**"
+        f"【{contract_label} "
+        f"{option_type}】"
     )
+
+
+    message.append(
+        f"権利行使価格：**"
+        f"{fmt(strike)}円**"
+    )
+
+
+    message.append(
+        f"現在の価格：**"
+        f"{fmt(current_price)}円**"
+    )
+
+
+    message.append("")
+
+
+    # --------------------------------------------------------
+    # Volume
+    # --------------------------------------------------------
+
+    message.append(
+        f"📦 取引量：**"
+        f"{fmt_signed(volume_diff)}枚** "
+        f"{volume_level}"
+    )
+
+
+    message.append(
+        f"💰 概算取引金額：**"
+        f"{fmt_money(estimated_trade_value)}**"
+    )
+
+
+    message.append(
+        f"→ {get_volume_explanation(volume_diff)}"
+    )
+
 
     message.append("")
 
@@ -943,27 +1231,31 @@ def build_discord_message(
     if oi_diff > 0:
 
         message.append(
-            f"📊 建玉：**{fmt_signed(oi_diff)}枚**"
+            f"📊 建玉：**"
+            f"{fmt_signed(oi_diff)}枚**"
         )
 
         message.append(
-            "→ この価格帯の未決済ポジションが増加"
+            "→ 未決済ポジションが増加"
         )
+
 
     elif oi_diff < 0:
 
         message.append(
-            f"📊 建玉：**{fmt_signed(oi_diff)}枚**"
+            f"📊 建玉：**"
+            f"{fmt_signed(oi_diff)}枚**"
         )
 
         message.append(
-            "→ この価格帯の未決済ポジションが減少"
+            "→ 未決済ポジションが減少"
         )
+
 
     else:
 
         message.append(
-            "📊 建玉：変化なし"
+            "📊 建玉：**変化なし**"
         )
 
 
@@ -971,68 +1263,31 @@ def build_discord_message(
 
 
     # --------------------------------------------------------
-    # Volume
-    # --------------------------------------------------------
-
-    if volume_diff > 0:
-
-        message.append(
-            f"📦 取引量：**{fmt_signed(volume_diff)}枚**"
-        )
-
-        message.append(
-            "→ この1回の更新間で取引が増加"
-        )
-
-    else:
-
-        message.append(
-            "📦 取引量：大きな増加なし"
-        )
-
-
-    message.append("")
-
-
-    # --------------------------------------------------------
-    # Price
+    # Option price
     # --------------------------------------------------------
 
     if price_diff != 0:
 
         message.append(
-            f"💴 価格：**{fmt_signed(price_diff)}円**"
+            f"💴 オプション価格："
+            f"**{fmt_signed(price_diff)}円**"
         )
+
 
         message.append(
             f"→ 前回比で{price_direction}"
         )
 
+
     else:
 
         message.append(
-            "💴 価格：大きな変化なし"
+            "💴 オプション価格："
+            "大きな変化なし"
         )
 
 
     message.append("")
-
-
-    # --------------------------------------------------------
-    # Explanation
-    # --------------------------------------------------------
-
-    explanation = option_explanation(
-        option_type
-    )
-
-    if explanation:
-
-        message.append(
-            f"ℹ️ {explanation}"
-        )
-
-        message.append("")
 
 
     # --------------------------------------------------------
@@ -1078,7 +1333,7 @@ def build_discord_message(
     ):
 
         reasons.append(
-            "価格が大きく変化"
+            "オプション価格が大きく変化"
         )
 
 
@@ -1088,26 +1343,49 @@ def build_discord_message(
             "🚨 **通知理由**"
         )
 
+
         for reason in reasons:
 
             message.append(
                 f"・{reason}"
             )
 
+
         message.append("")
 
 
     # --------------------------------------------------------
-    # Disclaimer
+    # Explanation
+    # --------------------------------------------------------
+
+    explanation = option_explanation(
+        option_type
+    )
+
+
+    if explanation:
+
+        message.append(
+            f"ℹ️ {explanation}"
+        )
+
+
+        message.append("")
+
+
+    # --------------------------------------------------------
+    # Important note
     # --------------------------------------------------------
 
     message.append(
         "⚠️ 建玉の増減だけでは、"
-        "買い・売りを断定することはできません。"
+        "買い・売りを断定できません。"
     )
 
+
     message.append(
-        "他の価格帯や出来高と合わせて確認してください。"
+        "他の価格帯・出来高・価格変化と"
+        "合わせて確認してください。"
     )
 
 
@@ -1166,9 +1444,11 @@ def send_discord_message(
             f"HTTP {response.status_code}"
         )
 
+
         print(
             response.text
         )
+
 
         return False
 
@@ -1212,7 +1492,7 @@ def get_alert_candidates(
 
 
     # --------------------------------------------------------
-    # 重要度を付ける
+    # Priority
     #
     # OI増減 ＞ Volume ＞ Price
     # --------------------------------------------------------
@@ -1223,6 +1503,7 @@ def get_alert_candidates(
             "alert_type",
             ""
         )
+
 
         score = 0
 
@@ -1259,18 +1540,26 @@ def get_alert_candidates(
             score += 100
 
 
-        score += abs(
-            number(
-                row.get(
-                    "open_interest_diff"
+        # Volumeの重要度を追加
+
+        score += (
+            abs(
+                number(
+                    row.get(
+                        "volume_diff"
+                    )
                 )
             )
+            * 2
         )
+
+
+        # OIの重要度
 
         score += abs(
             number(
                 row.get(
-                    "volume_diff"
+                    "open_interest_diff"
                 )
             )
         )
@@ -1297,13 +1586,17 @@ def send_alerts(
 ):
 
     print()
+
+
     print(
         "========================================"
     )
 
+
     print(
         "DISCORD ALERT"
     )
+
 
     print(
         "========================================"
@@ -1327,7 +1620,7 @@ def send_alerts(
 
 
     # --------------------------------------------------------
-    # Alert candidates
+    # Candidates
     # --------------------------------------------------------
 
     candidates = get_alert_candidates(
@@ -1352,7 +1645,7 @@ def send_alerts(
 
 
     # --------------------------------------------------------
-    # Load notification history
+    # History
     # --------------------------------------------------------
 
     history = load_alert_history()
@@ -1412,6 +1705,7 @@ def send_alerts(
 
         print()
 
+
         print(
             f"[ALERT "
             f"{sent_count + 1}/"
@@ -1428,25 +1722,59 @@ def send_alerts(
 
         print(
             f"OI diff: "
-            f"{fmt_signed(difference.get('open_interest_diff'))}"
+            f"{fmt_signed("
+                difference.get(
+                    "open_interest_diff"
+                )
+            )}"
         )
 
 
         print(
             f"Volume diff: "
-            f"{fmt_signed(difference.get('volume_diff'))}"
+            f"{fmt_signed("
+                difference.get(
+                    "volume_diff"
+                )
+            )}"
+        )
+
+
+        print(
+            f"Estimated trade value: "
+            f"{fmt_money("
+                difference.get(
+                    "estimated_trade_value"
+                )
+            )}"
         )
 
 
         print(
             f"Price diff: "
-            f"{fmt_signed(difference.get('last_price_diff'))}"
+            f"{fmt_signed("
+                difference.get(
+                    "last_price_diff"
+                )
+            )}"
+        )
+
+
+        print(
+            f"Volume level: "
+            f"{difference.get("
+                "volume_level",
+                ""
+            )}"
         )
 
 
         print(
             f"Alert type: "
-            f"{difference.get('alert_type', '')}"
+            f"{difference.get("
+                "alert_type",
+                ""
+            )}"
         )
 
 
@@ -1463,11 +1791,14 @@ def send_alerts(
 
             sent_count += 1
 
+
             history[key] = time.time()
+
 
             save_alert_history(
                 history
             )
+
 
         else:
 
@@ -1478,7 +1809,7 @@ def send_alerts(
 
 
         # ----------------------------------------------------
-        # Small delay
+        # Delay
         # ----------------------------------------------------
 
         time.sleep(
@@ -1503,17 +1834,23 @@ def save_previous(
     )
 
 
+    if not current_records:
+
+        print(
+            "[WARNING] "
+            "current_records is empty. "
+            "previous.csv was not updated."
+        )
+
+        return
+
+
     with open(
         PREVIOUS_FILE,
         "w",
         encoding="utf-8-sig",
         newline="",
     ) as f:
-
-        if not current_records:
-
-            return
-
 
         fieldnames = list(
             current_records[0].keys()
@@ -1547,13 +1884,17 @@ def save_previous(
 def main():
 
     print()
+
+
     print(
         "========================================"
     )
 
+
     print(
         "CALCULATE DIFFERENCES"
     )
+
 
     print(
         "========================================"
@@ -1586,17 +1927,19 @@ def main():
 
 
     # --------------------------------------------------------
-    # 初回実行
+    # First run
     # --------------------------------------------------------
 
     if not previous_records:
 
         print()
 
+
         print(
             "[INFO] "
             "previous.csv is empty or does not exist."
         )
+
 
         print(
             "[INFO] "
@@ -1609,8 +1952,6 @@ def main():
         )
 
 
-        # 空のdifferenceを作成
-
         save_differences(
             []
         )
@@ -1618,17 +1959,21 @@ def main():
 
         print()
 
+
         print(
             "========================================"
         )
+
 
         print(
             "FIRST RUN COMPLETE"
         )
 
+
         print(
             "========================================"
         )
+
 
         return
 
@@ -1646,7 +1991,7 @@ def main():
 
 
     # --------------------------------------------------------
-    # Save differences
+    # Save
     # --------------------------------------------------------
 
     save_differences(
@@ -1666,8 +2011,7 @@ def main():
     # --------------------------------------------------------
     # Update previous
     #
-    # 重要：
-    # Discord処理後に更新する
+    # Discord処理後に更新
     # --------------------------------------------------------
 
     save_previous(
@@ -1681,38 +2025,46 @@ def main():
 
     print()
 
+
     print(
         "========================================"
     )
 
+
     print(
         "DIFFERENCE COMPLETE"
     )
+
 
     print(
         f"Current records: "
         f"{len(current_records)}"
     )
 
+
     print(
         f"Previous records: "
         f"{len(previous_records)}"
     )
+
 
     print(
         f"Difference records: "
         f"{len(differences)}"
     )
 
+
     print(
         f"Alert candidates: "
         f"{len(get_alert_candidates(differences))}"
     )
 
+
     print(
         f"Alerts sent: "
         f"{alert_count}"
     )
+
 
     print(
         "========================================"
