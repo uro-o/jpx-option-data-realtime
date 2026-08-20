@@ -30,6 +30,15 @@ DISCORD_WEBHOOK_URL = os.environ.get(
     ""
 )
 
+# Discord 1メッセージの安全な文字数
+DISCORD_MAX_LENGTH = 1900
+
+# Discord送信リトライ回数
+DISCORD_MAX_RETRIES = 3
+
+# リトライ間隔
+DISCORD_RETRY_DELAY = 2
+
 
 # ============================================================
 # Alert settings
@@ -49,30 +58,11 @@ PRICE_CHANGE_THRESHOLD = 100
 
 
 # ============================================================
-# Discord settings
-# ============================================================
-
-# 0 = 無制限
-MAX_ALERTS = 0
-
-# Discordの1メッセージ最大文字数を安全側に設定
-DISCORD_MAX_LENGTH = 1900
-
-# Discord送信失敗時の最大リトライ回数
-DISCORD_RETRY_COUNT = 3
-
-# リトライ間隔
-DISCORD_RETRY_WAIT = 2
-
-# 複数メッセージを送る場合の間隔
-DISCORD_MESSAGE_INTERVAL = 1.0
-
-
-# ============================================================
 # Difference CSV columns
 # ============================================================
 
 DIFFERENCE_FIELDS = [
+
     "qri_update_time",
     "collected_at",
 
@@ -117,6 +107,7 @@ def number(value):
         return 0.0
 
     try:
+
         return float(
             str(value)
             .replace(",", "")
@@ -124,6 +115,7 @@ def number(value):
         )
 
     except Exception:
+
         return 0.0
 
 
@@ -134,14 +126,17 @@ def number(value):
 def fmt(value):
 
     try:
+
         value = float(value)
 
         if value.is_integer():
+
             return f"{int(value):,}"
 
         return f"{value:,.2f}"
 
     except Exception:
+
         return "-"
 
 
@@ -152,11 +147,13 @@ def fmt(value):
 def fmt_signed(value):
 
     try:
+
         value = float(value)
 
         if value > 0:
 
             if value.is_integer():
+
                 return f"+{int(value):,}"
 
             return f"+{value:,.2f}"
@@ -164,6 +161,7 @@ def fmt_signed(value):
         if value < 0:
 
             if value.is_integer():
+
                 return f"{int(value):,}"
 
             return f"{value:,.2f}"
@@ -171,6 +169,44 @@ def fmt_signed(value):
         return "0"
 
     except Exception:
+
+        return "-"
+
+
+# ============================================================
+# Format money
+# ============================================================
+
+def fmt_money(value):
+
+    try:
+
+        value = float(value)
+
+        if value >= 100_000_000:
+
+            oku = value / 100_000_000
+
+            if oku >= 10:
+
+                return f"約{oku:,.0f}億円"
+
+            return f"約{oku:,.2f}億円"
+
+        if value >= 10_000:
+
+            man = value / 10_000
+
+            if man >= 100:
+
+                return f"約{man:,.0f}万円"
+
+            return f"約{man:,.1f}万円"
+
+        return f"約{value:,.0f}円"
+
+    except Exception:
+
         return "-"
 
 
@@ -264,69 +300,52 @@ def calculate_differences(
 ):
 
     print()
+    print("========================================")
+    print("CALCULATING DIFFERENCE")
+    print("========================================")
+
     print(
-        "========================================"
-    )
-    print(
-        "CALCULATING DIFFERENCE"
-    )
-    print(
-        "========================================"
+        f"[CURRENT] records={len(current_records)}"
     )
 
     print(
-        f"[CURRENT] "
-        f"records={len(current_records)}"
+        f"[PREVIOUS] records={len(previous_records)}"
     )
 
-    print(
-        f"[PREVIOUS] "
-        f"records={len(previous_records)}"
-    )
+    # --------------------------------------------------------
+    # Previous data map
+    # --------------------------------------------------------
 
     previous_map = {}
 
     for row in previous_records:
 
         key = (
-            row.get(
-                "contract",
-                ""
-            ),
-            row.get(
-                "option_type",
-                ""
-            ),
-            row.get(
-                "strike",
-                ""
-            ),
+            row.get("contract", ""),
+            row.get("option_type", ""),
+            row.get("strike", ""),
         )
 
         previous_map[key] = row
 
     differences = []
 
+    # --------------------------------------------------------
+    # Compare
+    # --------------------------------------------------------
+
     for current in current_records:
 
         key = (
-            current.get(
-                "contract",
-                ""
-            ),
-            current.get(
-                "option_type",
-                ""
-            ),
-            current.get(
-                "strike",
-                ""
-            ),
+            current.get("contract", ""),
+            current.get("option_type", ""),
+            current.get("strike", ""),
         )
 
         previous = previous_map.get(key)
 
         if previous is None:
+
             continue
 
         # ----------------------------------------------------
@@ -334,15 +353,11 @@ def calculate_differences(
         # ----------------------------------------------------
 
         previous_oi = number(
-            previous.get(
-                "open_interest"
-            )
+            previous.get("open_interest")
         )
 
         current_oi = number(
-            current.get(
-                "open_interest"
-            )
+            current.get("open_interest")
         )
 
         oi_diff = (
@@ -355,15 +370,11 @@ def calculate_differences(
         # ----------------------------------------------------
 
         previous_volume = number(
-            previous.get(
-                "volume"
-            )
+            previous.get("volume")
         )
 
         current_volume = number(
-            current.get(
-                "volume"
-            )
+            current.get("volume")
         )
 
         volume_diff = (
@@ -376,15 +387,11 @@ def calculate_differences(
         # ----------------------------------------------------
 
         previous_price = number(
-            previous.get(
-                "last_price"
-            )
+            previous.get("last_price")
         )
 
         current_price = number(
-            current.get(
-                "last_price"
-            )
+            current.get("last_price")
         )
 
         price_diff = (
@@ -397,15 +404,11 @@ def calculate_differences(
         # ----------------------------------------------------
 
         previous_ask_qty = number(
-            previous.get(
-                "ask_quantity"
-            )
+            previous.get("ask_quantity")
         )
 
         current_ask_qty = number(
-            current.get(
-                "ask_quantity"
-            )
+            current.get("ask_quantity")
         )
 
         ask_qty_diff = (
@@ -418,15 +421,11 @@ def calculate_differences(
         # ----------------------------------------------------
 
         previous_bid_qty = number(
-            previous.get(
-                "bid_quantity"
-            )
+            previous.get("bid_quantity")
         )
 
         current_bid_qty = number(
-            current.get(
-                "bid_quantity"
-            )
+            current.get("bid_quantity")
         )
 
         bid_qty_diff = (
@@ -441,18 +440,24 @@ def calculate_differences(
         alerts = []
 
         if volume_diff >= VOLUME_THRESHOLD:
+
             alerts.append("VOLUME")
 
         if oi_diff >= OI_INCREASE_THRESHOLD:
+
             alerts.append("OI_INCREASE")
 
         if oi_diff <= -OI_DECREASE_THRESHOLD:
+
             alerts.append("OI_DECREASE")
 
         if abs(price_diff) >= PRICE_CHANGE_THRESHOLD:
+
             alerts.append("PRICE")
 
-        alert_type = ",".join(alerts)
+        alert_type = ",".join(
+            alerts
+        )
 
         # ----------------------------------------------------
         # Save difference
@@ -540,8 +545,7 @@ def calculate_differences(
         })
 
     print(
-        f"[RESULT] "
-        f"records={len(differences)}"
+        f"[RESULT] records={len(differences)}"
     )
 
     return differences
@@ -551,92 +555,57 @@ def calculate_differences(
 # Volume gradient
 # ============================================================
 
-def volume_gradient(volume):
+def get_volume_gradient(volume):
 
     volume = abs(number(volume))
 
     if volume >= 500:
+
         return "🔴 非常に大きい"
 
-    if volume >= 200:
+    if volume >= 300:
+
         return "🟠 大きい"
 
     if volume >= 100:
-        return "🟡 大きい"
+
+        return "🟡 やや大きい"
 
     if volume >= 50:
-        return "🟢 やや大きい"
 
-    if volume > 0:
-        return "⚪ 小さい"
+        return "🟢 中程度"
 
-    return "⚪ 変化なし"
+    return "⚪ 小さい"
 
 
 # ============================================================
 # Estimated transaction amount
 #
 # 日経225オプション
-# 1ポイント × 1,000円
+# 1ポイント = 1,000円
+#
+# 概算取引金額
+# = 現在価格 × 出来高増加枚数 × 1,000円
 # ============================================================
 
-def estimated_transaction_amount(
-    difference
+def calculate_transaction_amount(
+    current_price,
+    volume_diff,
 ):
 
-    current_price = number(
-        difference.get(
-            "current_last_price"
-        )
+    price = abs(
+        number(current_price)
     )
 
-    volume_diff = abs(
-        number(
-            difference.get(
-                "volume_diff"
-            )
-        )
+    volume = abs(
+        number(volume_diff)
     )
 
-    amount = (
-        current_price *
-        volume_diff *
+    return (
+        price *
+        volume *
         1000
     )
-
-    return amount
-
-
-# ============================================================
-# Format transaction amount
-# ============================================================
-
-def fmt_money(amount):
-
-    amount = float(amount)
-
-    if amount <= 0:
-        return "-"
-
-    if amount >= 100000000:
-
-        oku = amount / 100000000
-
-        if oku >= 10:
-            return f"約{oku:.0f}億円"
-
-        return f"約{oku:.1f}億円"
-
-    if amount >= 10000:
-
-        man = amount / 10000
-
-        if man >= 1000:
-            return f"約{man:,.0f}万円"
-
-        return f"約{man:0.0f}万円"
-
-    return f"約{amount:,.0f}円"
 
 
 # ============================================================
@@ -645,86 +614,190 @@ def fmt_money(amount):
 
 def determine_judgment(
     volume_diff,
-    oi_diff
+    oi_diff,
+    price_diff,
 ):
 
-    volume_diff = number(volume_diff)
-    oi_diff = number(oi_diff)
+    volume_up = (
+        volume_diff >= VOLUME_THRESHOLD
+    )
 
-    if volume_diff > 0 and oi_diff >= OI_INCREASE_THRESHOLD:
+    oi_up = (
+        oi_diff >= OI_INCREASE_THRESHOLD
+    )
+
+    oi_down = (
+        oi_diff <= -OI_DECREASE_THRESHOLD
+    )
+
+    price_up = (
+        price_diff > 0
+    )
+
+    price_down = (
+        price_diff < 0
+    )
+
+    # --------------------------------------------------------
+    # 出来高増加 ＋ 建玉増加
+    # --------------------------------------------------------
+
+    if volume_up and oi_up:
+
+        if price_up:
+
+            return (
+                "出来高増加 ＋ 建玉増加 ＋ 価格上昇",
+                "→ 上昇方向の新規ポジション形成の可能性：高"
+            )
+
+        if price_down:
+
+            return (
+                "出来高増加 ＋ 建玉増加 ＋ 価格下落",
+                "→ 下落方向の新規ポジション形成の可能性：高"
+            )
 
         return (
             "出来高増加 ＋ 建玉増加",
             "→ 新規ポジション形成の可能性：高"
         )
 
-    if volume_diff > 0 and oi_diff <= -OI_DECREASE_THRESHOLD:
+    # --------------------------------------------------------
+    # 出来高増加 ＋ 建玉減少
+    # --------------------------------------------------------
+
+    if volume_up and oi_down:
+
+        if price_up:
+
+            return (
+                "出来高増加 ＋ 建玉減少 ＋ 価格上昇",
+                "→ 売りポジションの解消が進んでいる可能性：高"
+            )
+
+        if price_down:
+
+            return (
+                "出来高増加 ＋ 建玉減少 ＋ 価格下落",
+                "→ 買いポジションの解消が進んでいる可能性：高"
+            )
 
         return (
             "出来高増加 ＋ 建玉減少",
-            "→ ポジション決済・整理の可能性：高"
+            "→ ポジション解消の可能性：高"
         )
 
-    if volume_diff > 0 and oi_diff > 0:
+    # --------------------------------------------------------
+    # 出来高増加 ＋ OIほぼ変化なし
+    # --------------------------------------------------------
+
+    if volume_up:
+
+        if price_up:
+
+            return (
+                "出来高増加 ＋ 建玉ほぼ変化なし ＋ 価格上昇",
+                "→ 売買が活発化し、価格が上昇"
+            )
+
+        if price_down:
+
+            return (
+                "出来高増加 ＋ 建玉ほぼ変化なし ＋ 価格下落",
+                "→ 売買が活発化し、価格が下落"
+            )
 
         return (
-            "出来高増加 ＋ 建玉増加",
-            "→ 新規ポジション形成の可能性：あり"
-        )
-
-    if volume_diff > 0 and oi_diff < 0:
-
-        return (
-            "出来高増加 ＋ 建玉減少",
-            "→ ポジション決済・整理の可能性：あり"
-        )
-
-    if volume_diff > 0:
-
-        return (
-            "出来高増加",
+            "出来高増加 ＋ 建玉ほぼ変化なし",
             "→ 取引が活発化"
         )
 
-    if oi_diff >= OI_INCREASE_THRESHOLD:
+    # --------------------------------------------------------
+    # 建玉増加
+    # --------------------------------------------------------
+
+    if oi_up:
+
+        if price_up:
+
+            return (
+                "建玉増加 ＋ 価格上昇",
+                "→ 上昇方向のポジション形成が進んでいる可能性"
+            )
+
+        if price_down:
+
+            return (
+                "建玉増加 ＋ 価格下落",
+                "→ 下落方向のポジション形成が進んでいる可能性"
+            )
 
         return (
             "建玉増加",
-            "→ 新規ポジション形成の可能性"
+            "→ ポジション形成が進んでいる可能性"
         )
 
-    if oi_diff <= -OI_DECREASE_THRESHOLD:
+    # --------------------------------------------------------
+    # 建玉減少
+    # --------------------------------------------------------
+
+    if oi_down:
+
+        if price_up:
+
+            return (
+                "建玉減少 ＋ 価格上昇",
+                "→ 売りポジションの解消が進んでいる可能性"
+            )
+
+        if price_down:
+
+            return (
+                "建玉減少 ＋ 価格下落",
+                "→ 買いポジションの解消が進んでいる可能性"
+            )
 
         return (
             "建玉減少",
-            "→ ポジション決済・整理の可能性"
+            "→ ポジション解消が進んでいる可能性"
         )
 
-    if oi_diff > 0:
+    # --------------------------------------------------------
+    # 価格のみ
+    # --------------------------------------------------------
 
-        return (
-            "建玉増加",
-            "→ 建玉が増加"
-        )
+    if abs(price_diff) >= PRICE_CHANGE_THRESHOLD:
 
-    if oi_diff < 0:
+        if price_up:
 
-        return (
-            "建玉減少",
-            "→ 建玉が減少"
-        )
+            return (
+                "価格上昇",
+                "→ オプション価格が大きく上昇"
+            )
+
+        if price_down:
+
+            return (
+                "価格下落",
+                "→ オプション価格が大きく下落"
+            )
+
+    # --------------------------------------------------------
+    # その他
+    # --------------------------------------------------------
 
     return (
-        "価格変化",
-        "→ オプション価格が変化"
+        "大きな変化なし",
+        "→ 現時点では目立ったポジション変化なし"
     )
 
 
 # ============================================================
-# Build alert message
+# Build single alert
 # ============================================================
 
-def build_discord_message(
+def build_discord_alert(
     difference
 ):
 
@@ -760,88 +833,73 @@ def build_discord_message(
         )
     )
 
-    price_diff = number(
-        difference.get(
-            "last_price_diff"
-        )
-    )
-
     current_price = number(
         difference.get(
             "current_last_price"
         )
     )
 
+    price_diff = number(
+        difference.get(
+            "last_price_diff"
+        )
+    )
+
+    alert_type = difference.get(
+        "alert_type",
+        ""
+    )
+
     # --------------------------------------------------------
-    # Alert title
+    # Title
     # --------------------------------------------------------
 
-    if "OI_INCREASE" in difference.get(
-        "alert_type",
-        ""
-    ):
+    if "OI_INCREASE" in alert_type:
 
         title = "🔥 大きな取引を検知"
 
-    elif "OI_DECREASE" in difference.get(
-        "alert_type",
-        ""
-    ):
+    elif "VOLUME" in alert_type:
 
         title = "🔥 大きな取引を検知"
 
-    elif "VOLUME" in difference.get(
-        "alert_type",
-        ""
-    ):
+    elif "OI_DECREASE" in alert_type:
 
-        title = "🔥 大きな取引を検知"
+        title = "⚠️ ポジション変化を検知"
+
+    elif "PRICE" in alert_type:
+
+        title = "💹 オプション価格が大きく変化"
 
     else:
 
-        title = "💹 オプション価格が大きく変化"
+        title = "🔔 オプション変化を検知"
 
     # --------------------------------------------------------
     # Volume gradient
     # --------------------------------------------------------
 
-    gradient = volume_gradient(
+    gradient = get_volume_gradient(
         volume_diff
     )
 
     # --------------------------------------------------------
-    # Estimated transaction amount
+    # Transaction amount
     # --------------------------------------------------------
 
-    estimated_amount = (
-        estimated_transaction_amount(
-            difference
-        )
+    transaction_amount = calculate_transaction_amount(
+        current_price,
+        volume_diff,
     )
 
     # --------------------------------------------------------
     # Judgment
     # --------------------------------------------------------
 
-    judgment_main, judgment_sub = (
-        determine_judgment(
-            volume_diff,
-            oi_diff
-        )
+    judgment_main, judgment_sub = determine_judgment(
+        volume_diff,
+        oi_diff,
+        price_diff,
     )
-
-    # --------------------------------------------------------
-    # Price direction
-    # --------------------------------------------------------
-
-    if price_diff > 0:
-        price_direction = "上昇"
-
-    elif price_diff < 0:
-        price_direction = "下落"
-
-    else:
-        price_direction = "変化なし"
 
     # --------------------------------------------------------
     # Message
@@ -854,7 +912,7 @@ def build_discord_message(
     )
 
     message.append(
-        f"🔥 **{title.replace('🔥 ', '')}**"
+        f"**{title}**"
     )
 
     message.append(
@@ -866,7 +924,7 @@ def build_discord_message(
     )
 
     message.append(
-        f"変化時刻：**{qri_update_time}**"
+        f"変化時刻：{qri_update_time}"
     )
 
     message.append("")
@@ -876,27 +934,26 @@ def build_discord_message(
     # --------------------------------------------------------
 
     message.append(
-        f"📦 取引量：**{fmt_signed(volume_diff)}枚** "
-        f"{gradient}"
+        f"📦 取引量：**{fmt_signed(volume_diff)}枚** {gradient}"
+    )
+
+    message.append(
+        f"📦 取引量に応じたグラデーション判定"
+    )
+
+    message.append(
+        f"→ {gradient}"
     )
 
     message.append("")
 
     # --------------------------------------------------------
-    # Estimated transaction amount
+    # Money
     # --------------------------------------------------------
 
-    if estimated_amount > 0:
-
-        message.append(
-            f"💰 概算取引金額：**{fmt_money(estimated_amount)}**"
-        )
-
-    else:
-
-        message.append(
-            "💰 概算取引金額：算出できません"
-        )
+    message.append(
+        f"💰 概算取引金額：**{fmt_money(transaction_amount)}**"
+    )
 
     message.append("")
 
@@ -914,21 +971,9 @@ def build_discord_message(
     # Price
     # --------------------------------------------------------
 
-    if price_diff != 0:
-
-        message.append(
-            f"💴 価格：**{fmt_signed(price_diff)}円**"
-        )
-
-        message.append(
-            f"→ 前回比で{price_direction}"
-        )
-
-    else:
-
-        message.append(
-            f"💴 価格：**{fmt(current_price)}円**"
-        )
+    message.append(
+        f"💴 価格：**{fmt_signed(price_diff)}円**"
+    )
 
     message.append("")
 
@@ -948,6 +993,8 @@ def build_discord_message(
         judgment_sub
     )
 
+    message.append("")
+
     message.append(
         "━━━━━━━━━━━━━━━━━━"
     )
@@ -958,164 +1005,71 @@ def build_discord_message(
 
 
 # ============================================================
-# Build grouped Discord message
+# Load pending alerts
 # ============================================================
 
-def build_grouped_message(
-    differences
+def load_pending_alerts():
+
+    if not PENDING_ALERTS_FILE.exists():
+
+        return []
+
+    try:
+
+        with open(
+            PENDING_ALERTS_FILE,
+            "r",
+            encoding="utf-8",
+        ) as f:
+
+            data = json.load(f)
+
+        if isinstance(data, list):
+
+            return data
+
+        return []
+
+    except Exception as e:
+
+        print(
+            f"[WARNING] "
+            f"Could not load pending alerts: {e}"
+        )
+
+        return []
+
+
+# ============================================================
+# Save pending alerts
+# ============================================================
+
+def save_pending_alerts(
+    alerts
 ):
 
-    if not differences:
-        return ""
-
-    messages = []
-
-    messages.append(
-        "📡 **オプション変化通知**"
+    DATA_DIR.mkdir(
+        parents=True,
+        exist_ok=True,
     )
 
-    messages.append(
-        f"検知件数：**{len(differences)}件**"
-    )
+    with open(
+        PENDING_ALERTS_FILE,
+        "w",
+        encoding="utf-8",
+    ) as f:
 
-    messages.append(
-        "━━━━━━━━━━━━━━━━━━"
-    )
-
-    for index, difference in enumerate(
-        differences,
-        start=1
-    ):
-
-        contract = difference.get(
-            "contract",
-            ""
+        json.dump(
+            alerts,
+            f,
+            ensure_ascii=False,
+            indent=2,
         )
 
-        option_type = difference.get(
-            "option_type",
-            ""
-        )
-
-        strike = difference.get(
-            "strike",
-            ""
-        )
-
-        qri_update_time = difference.get(
-            "qri_update_time",
-            ""
-        )
-
-        volume_diff = number(
-            difference.get(
-                "volume_diff"
-            )
-        )
-
-        oi_diff = number(
-            difference.get(
-                "open_interest_diff"
-            )
-        )
-
-        price_diff = number(
-            difference.get(
-                "last_price_diff"
-            )
-        )
-
-        current_price = number(
-            difference.get(
-                "current_last_price"
-            )
-        )
-
-        gradient = volume_gradient(
-            volume_diff
-        )
-
-        amount = (
-            estimated_transaction_amount(
-                difference
-            )
-        )
-
-        judgment_main, judgment_sub = (
-            determine_judgment(
-                volume_diff,
-                oi_diff
-            )
-        )
-
-        if price_diff > 0:
-            price_text = (
-                f"+{fmt(price_diff)}円 ↑"
-            )
-
-        elif price_diff < 0:
-            price_text = (
-                f"{fmt(price_diff)}円 ↓"
-            )
-
-        else:
-            price_text = "変化なし"
-
-        block = []
-
-        block.append(
-            f"**{index}. {contract}限 "
-            f"{option_type} "
-            f"{fmt(strike)}円**"
-        )
-
-        block.append(
-            f"🕐 {qri_update_time}"
-        )
-
-        block.append(
-            f"📦 取引量：**{fmt_signed(volume_diff)}枚** "
-            f"{gradient}"
-        )
-
-        if amount > 0:
-
-            block.append(
-                f"💰 概算取引金額：**{fmt_money(amount)}**"
-            )
-
-        else:
-
-            block.append(
-                "💰 概算取引金額：算出できません"
-            )
-
-        block.append(
-            f"📊 建玉：**{fmt_signed(oi_diff)}枚**"
-        )
-
-        block.append(
-            f"💴 価格：**{price_text}**"
-        )
-
-        block.append(
-            f"🔎 **{judgment_main}**"
-        )
-
-        block.append(
-            judgment_sub
-        )
-
-        block.append(
-            "──────────────────"
-        )
-
-        messages.extend(
-            block
-        )
-
-    return "\n".join(
-        messages
+    print(
+        f"[SAVE] "
+        f"{PENDING_ALERTS_FILE} "
+        f"alerts={len(alerts)}"
     )
 
 
@@ -1123,46 +1077,47 @@ def build_grouped_message(
 # Split Discord message
 # ============================================================
 
-def split_message(
-    message,
-    max_length=DISCORD_MAX_LENGTH
+def split_discord_message(
+    message
 ):
 
-    if len(message) <= max_length:
+    if len(message) <= DISCORD_MAX_LENGTH:
+
         return [message]
+
+    parts = []
+
+    current = ""
 
     lines = message.split("\n")
 
-    chunks = []
-    current = ""
-
     for line in lines:
 
-        candidate = (
-            current +
-            "\n" +
-            line
-        ).strip()
-
-        if len(candidate) <= max_length:
-
-            current = candidate
-
-        else:
+        # 追加すると上限を超える場合
+        if (
+            len(current) +
+            len(line) +
+            1
+            > DISCORD_MAX_LENGTH
+        ):
 
             if current:
-                chunks.append(
+
+                parts.append(
                     current
                 )
 
-            current = line
+                current = ""
+
+        current += line + "\n"
 
     if current:
-        chunks.append(
-            current
+
+        parts.append(
+            current.rstrip()
         )
 
-    return chunks
+    return parts
 
 
 # ============================================================
@@ -1184,7 +1139,7 @@ def send_discord_message(
 
     for attempt in range(
         1,
-        DISCORD_RETRY_COUNT + 1
+        DISCORD_MAX_RETRIES + 1,
     ):
 
         try:
@@ -1231,185 +1186,62 @@ def send_discord_message(
                 f"attempt={attempt}"
             )
 
-        if attempt < DISCORD_RETRY_COUNT:
-
-            print(
-                f"[DISCORD] "
-                f"Retrying in "
-                f"{DISCORD_RETRY_WAIT} seconds..."
-            )
+        if attempt < DISCORD_MAX_RETRIES:
 
             time.sleep(
-                DISCORD_RETRY_WAIT
+                DISCORD_RETRY_DELAY
             )
-
-    print(
-        "[DISCORD] "
-        "All retry attempts failed."
-    )
 
     return False
 
 
 # ============================================================
-# Load pending alerts
+# Send Discord message with splitting
 # ============================================================
 
-def load_pending_alerts():
-
-    if not PENDING_ALERTS_FILE.exists():
-        return []
-
-    try:
-
-        with open(
-            PENDING_ALERTS_FILE,
-            "r",
-            encoding="utf-8",
-        ) as f:
-
-            data = json.load(f)
-
-        if isinstance(
-            data,
-            list
-        ):
-
-            print(
-                f"[PENDING] "
-                f"Loaded {len(data)} pending alerts."
-            )
-
-            return data
-
-        return []
-
-    except Exception as e:
-
-        print(
-            f"[WARNING] "
-            f"Could not load pending alerts: {e}"
-        )
-
-        return []
-
-
-# ============================================================
-# Save pending alerts
-# ============================================================
-
-def save_pending_alerts(
-    alerts
+def send_discord_message_parts(
+    message
 ):
 
-    DATA_DIR.mkdir(
-        parents=True,
-        exist_ok=True,
+    parts = split_discord_message(
+        message
     )
-
-    with open(
-        PENDING_ALERTS_FILE,
-        "w",
-        encoding="utf-8",
-    ) as f:
-
-        json.dump(
-            alerts,
-            f,
-            ensure_ascii=False,
-            indent=2,
-        )
 
     print(
-        f"[PENDING] "
-        f"Saved {len(alerts)} pending alerts."
+        f"[DISCORD] "
+        f"Message parts={len(parts)}"
     )
 
+    for index, part in enumerate(
+        parts,
+        start=1
+    ):
 
-# ============================================================
-# Clear pending alerts
-# ============================================================
-
-def clear_pending_alerts():
-
-    if PENDING_ALERTS_FILE.exists():
-
-        try:
-
-            PENDING_ALERTS_FILE.unlink()
-
-            print(
-                "[PENDING] "
-                "Pending alerts cleared."
-            )
-
-        except Exception as e:
-
-            print(
-                f"[WARNING] "
-                f"Could not delete pending alerts: {e}"
-            )
-
-
-# ============================================================
-# Alert candidate priority
-# ============================================================
-
-def alert_priority(row):
-
-    alert_type = row.get(
-        "alert_type",
-        ""
-    )
-
-    score = 0
-
-    if "OI_INCREASE" in alert_type:
-        score += 100000
-
-    if "OI_DECREASE" in alert_type:
-        score += 90000
-
-    if "VOLUME" in alert_type:
-        score += 50000
-
-    if "PRICE" in alert_type:
-        score += 10000
-
-    score += (
-        abs(
-            number(
-                row.get(
-                    "open_interest_diff"
-                )
-            )
-        ) *
-        10
-    )
-
-    score += abs(
-        number(
-            row.get(
-                "volume_diff"
-            )
+        print(
+            f"[DISCORD] "
+            f"Sending part "
+            f"{index}/{len(parts)}"
         )
-    )
 
-    score += (
-        abs(
-            number(
-                row.get(
-                    "last_price_diff"
-                )
-            )
+        success = send_discord_message(
+            part
         )
-    )
 
-    return score
+        if not success:
+
+            return False
+
+        if index < len(parts):
+
+            time.sleep(
+                0.5
+            )
+
+    return True
 
 
 # ============================================================
-# Get alert candidates
+# Select alert candidates
 # ============================================================
 
 def get_alert_candidates(
@@ -1426,28 +1258,64 @@ def get_alert_candidates(
         )
 
         if not alert_type:
+
             continue
 
         candidates.append(
             row
         )
 
+    # --------------------------------------------------------
+    # Important alerts first
+    # --------------------------------------------------------
+
+    def priority(row):
+
+        alert_type = row.get(
+            "alert_type",
+            ""
+        )
+
+        score = 0
+
+        if "OI_INCREASE" in alert_type:
+
+            score += 1000
+
+        if "OI_DECREASE" in alert_type:
+
+            score += 900
+
+        if "VOLUME" in alert_type:
+
+            score += 500
+
+        if "PRICE" in alert_type:
+
+            score += 100
+
+        score += abs(
+            number(
+                row.get(
+                    "open_interest_diff"
+                )
+            )
+        )
+
+        score += abs(
+            number(
+                row.get(
+                    "volume_diff"
+                )
+            )
+        )
+
+        return score
+
     candidates.sort(
-        key=alert_priority,
+        key=priority,
         reverse=True
     )
-
-    # --------------------------------------------------------
-    # MAX_ALERTS
-    #
-    # 0 = 無制限
-    # --------------------------------------------------------
-
-    if MAX_ALERTS > 0:
-
-        return candidates[
-            :MAX_ALERTS
-        ]
 
     return candidates
 
@@ -1461,17 +1329,9 @@ def send_alerts(
 ):
 
     print()
-    print(
-        "========================================"
-    )
-
-    print(
-        "DISCORD ALERT"
-    )
-
-    print(
-        "========================================"
-    )
+    print("========================================")
+    print("DISCORD ALERT")
+    print("========================================")
 
     if not DISCORD_WEBHOOK_URL:
 
@@ -1488,75 +1348,18 @@ def send_alerts(
     )
 
     # --------------------------------------------------------
-    # Load pending alerts first
+    # Load pending
     # --------------------------------------------------------
 
-    pending_alerts = (
-        load_pending_alerts()
-    )
-
-    pending_sent = 0
+    pending_alerts = load_pending_alerts()
 
     if pending_alerts:
 
         print(
-            f"[PENDING] "
-            f"Retrying {len(pending_alerts)} "
-            f"pending alerts."
+            f"[DISCORD] "
+            f"Pending alerts: "
+            f"{len(pending_alerts)}"
         )
-
-        pending_message = (
-            build_grouped_message(
-                pending_alerts
-            )
-        )
-
-        pending_chunks = split_message(
-            pending_message
-        )
-
-        pending_failed = False
-
-        for chunk_index, chunk in enumerate(
-            pending_chunks,
-            start=1
-        ):
-
-            print(
-                f"[PENDING] "
-                f"Sending chunk "
-                f"{chunk_index}/"
-                f"{len(pending_chunks)}"
-            )
-
-            success = send_discord_message(
-                chunk
-            )
-
-            if success:
-
-                pending_sent += 1
-
-                time.sleep(
-                    DISCORD_MESSAGE_INTERVAL
-                )
-
-            else:
-
-                pending_failed = True
-
-                break
-
-        if not pending_failed:
-
-            clear_pending_alerts()
-
-        else:
-
-            print(
-                "[PENDING] "
-                "Pending alerts remain."
-            )
 
     # --------------------------------------------------------
     # Current candidates
@@ -1571,7 +1374,11 @@ def send_alerts(
         f"{len(candidates)}"
     )
 
-    if not candidates:
+    # --------------------------------------------------------
+    # Nothing to send
+    # --------------------------------------------------------
+
+    if not candidates and not pending_alerts:
 
         print(
             "[DISCORD] "
@@ -1580,102 +1387,170 @@ def send_alerts(
 
         return 0
 
+    sent_count = 0
+
     # --------------------------------------------------------
-    # Build grouped message
+    # First send pending alerts
     # --------------------------------------------------------
 
-    grouped_message = (
-        build_grouped_message(
-            candidates
+    if pending_alerts:
+
+        print()
+        print(
+            "----------------------------------------"
         )
-    )
 
-    chunks = split_message(
-        grouped_message
-    )
+        print(
+            "RESENDING PENDING ALERTS"
+        )
 
-    print(
-        f"[DISCORD] "
-        f"Sending {len(candidates)} "
-        f"alerts in {len(chunks)} message(s)."
-    )
+        print(
+            "----------------------------------------"
+        )
+
+        remaining_pending = []
+
+        for pending in pending_alerts:
+
+            message = pending.get(
+                "message",
+                ""
+            )
+
+            if not message:
+
+                continue
+
+            success = send_discord_message_parts(
+                message
+            )
+
+            if success:
+
+                sent_count += 1
+
+            else:
+
+                remaining_pending.append(
+                    pending
+                )
+
+        save_pending_alerts(
+            remaining_pending
+        )
 
     # --------------------------------------------------------
-    # Send chunks
+    # Current alerts
     # --------------------------------------------------------
 
-    sent_alerts = 0
+    if candidates:
 
-    for chunk_index, chunk in enumerate(
-        chunks,
+        print()
+        print(
+            "----------------------------------------"
+        )
+
+        print(
+            "CURRENT ALERTS"
+        )
+
+        print(
+            "----------------------------------------"
+        )
+
+    for index, difference in enumerate(
+        candidates,
         start=1
     ):
 
         print()
         print(
-            f"[DISCORD] "
-            f"Message "
-            f"{chunk_index}/"
-            f"{len(chunks)}"
+            f"[ALERT {index}/{len(candidates)}]"
         )
 
-        success = send_discord_message(
-            chunk
+        print(
+            f"{difference.get('contract', '')} "
+            f"{difference.get('option_type', '')} "
+            f"{difference.get('strike', '')}"
+        )
+
+        print(
+            f"OI diff: "
+            f"{fmt_signed(difference.get('open_interest_diff'))}"
+        )
+
+        print(
+            f"Volume diff: "
+            f"{fmt_signed(difference.get('volume_diff'))}"
+        )
+
+        print(
+            f"Price diff: "
+            f"{fmt_signed(difference.get('last_price_diff'))}"
+        )
+
+        print(
+            f"Alert type: "
+            f"{difference.get('alert_type', '')}"
+        )
+
+        message = build_discord_alert(
+            difference
+        )
+
+        success = send_discord_message_parts(
+            message
         )
 
         if success:
 
-            # このchunkに含まれる候補数を概算
-            # 1件目以降の番号を数える
-            chunk_alert_count = (
-                chunk.count(
-                    "円**"
-                )
-            )
-
-            sent_alerts += (
-                chunk_alert_count
-            )
+            sent_count += 1
 
         else:
 
             print(
                 "[DISCORD] "
-                "Message failed."
+                "Failed to send alert."
             )
 
             # ------------------------------------------------
-            # 失敗した場合は候補全体を保留
+            # Save failed notification
             # ------------------------------------------------
+
+            pending_alerts = load_pending_alerts()
+
+            pending_alerts.append({
+
+                "created_at":
+                    time.time(),
+
+                "contract":
+                    difference.get(
+                        "contract",
+                        ""
+                    ),
+
+                "option_type":
+                    difference.get(
+                        "option_type",
+                        ""
+                    ),
+
+                "strike":
+                    difference.get(
+                        "strike",
+                        ""
+                    ),
+
+                "message":
+                    message,
+            })
 
             save_pending_alerts(
-                candidates
+                pending_alerts
             )
 
-            print(
-                "[DISCORD] "
-                "Current alerts saved "
-                "for retry."
-            )
-
-            break
-
-        time.sleep(
-            DISCORD_MESSAGE_INTERVAL
-        )
-
-    # --------------------------------------------------------
-    # 送信成功した場合
-    # --------------------------------------------------------
-
-    if sent_alerts > 0:
-
-        print(
-            f"[DISCORD] "
-            f"Alert messages sent successfully."
-        )
-
-    return len(candidates)
+    return sent_count
 
 
 # ============================================================
@@ -1700,16 +1575,16 @@ def save_previous(
 
         return
 
+    fieldnames = list(
+        current_records[0].keys()
+    )
+
     with open(
         PREVIOUS_FILE,
         "w",
         encoding="utf-8-sig",
         newline="",
     ) as f:
-
-        fieldnames = list(
-            current_records[0].keys()
-        )
 
         writer = csv.DictWriter(
             f,
@@ -1736,17 +1611,9 @@ def save_previous(
 def main():
 
     print()
-    print(
-        "========================================"
-    )
-
-    print(
-        "CALCULATE DIFFERENCES"
-    )
-
-    print(
-        "========================================"
-    )
+    print("========================================")
+    print("CALCULATE DIFFERENCES")
+    print("========================================")
 
     # --------------------------------------------------------
     # Load current
@@ -1777,7 +1644,6 @@ def main():
     if not previous_records:
 
         print()
-
         print(
             "[INFO] "
             "previous.csv is empty or does not exist."
@@ -1797,23 +1663,14 @@ def main():
         )
 
         print()
-
-        print(
-            "========================================"
-        )
-
-        print(
-            "FIRST RUN COMPLETE"
-        )
-
-        print(
-            "========================================"
-        )
+        print("========================================")
+        print("FIRST RUN COMPLETE")
+        print("========================================")
 
         return
 
     # --------------------------------------------------------
-    # Calculate
+    # Calculate differences
     # --------------------------------------------------------
 
     differences = calculate_differences(
@@ -1842,7 +1699,7 @@ def main():
     # --------------------------------------------------------
     # Update previous
     #
-    # Discord処理後に更新
+    # Discord処理後に更新する
     # --------------------------------------------------------
 
     save_previous(
@@ -1853,21 +1710,13 @@ def main():
     # Summary
     # --------------------------------------------------------
 
-    candidates_count = len(
-        get_alert_candidates(
-            differences
-        )
+    candidates = get_alert_candidates(
+        differences
     )
 
     print()
-
-    print(
-        "========================================"
-    )
-
-    print(
-        "DIFFERENCE COMPLETE"
-    )
+    print("========================================")
+    print("DIFFERENCE COMPLETE")
 
     print(
         f"Current records: "
@@ -1886,17 +1735,15 @@ def main():
 
     print(
         f"Alert candidates: "
-        f"{candidates_count}"
+        f"{len(candidates)}"
     )
 
     print(
-        f"Alerts processed: "
+        f"Alerts sent: "
         f"{alert_count}"
     )
 
-    print(
-        "========================================"
-    )
+    print("========================================")
 
 
 # ============================================================
