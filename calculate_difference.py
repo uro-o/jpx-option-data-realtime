@@ -1,3 +1,4 @@
+```python
 import csv
 import os
 import time
@@ -32,19 +33,30 @@ DISCORD_WEBHOOK_URL = os.environ.get(
 # ============================================================
 
 # ------------------------------------------------------------
-# 通知対象となる最低概算取引金額
+# 通知条件①
+# 概算取引金額
 #
-# 例：
-# 1,000,000 = 100万円
-# 5,000,000 = 500万円
-# 10,000,000 = 1,000万円
+# 100万円以上なら通知
 # ------------------------------------------------------------
 
 MIN_ESTIMATED_TRADE_VALUE = 1_000_000
 
 
 # ------------------------------------------------------------
-# 大きな出来高増加
+# 通知条件②
+# 大きな建玉変化
+#
+# OIが +20枚以上
+# または
+# OIが -20枚以下
+# なら通知
+# ------------------------------------------------------------
+
+MIN_OI_CHANGE = 20
+
+
+# ------------------------------------------------------------
+# 出来高増加
 # ------------------------------------------------------------
 
 VOLUME_THRESHOLD = 100
@@ -54,14 +66,14 @@ VOLUME_THRESHOLD = 100
 # OI増加
 # ------------------------------------------------------------
 
-OI_INCREASE_THRESHOLD = 100
+OI_INCREASE_THRESHOLD = 20
 
 
 # ------------------------------------------------------------
 # OI減少
 # ------------------------------------------------------------
 
-OI_DECREASE_THRESHOLD = 100
+OI_DECREASE_THRESHOLD = 20
 
 
 # ------------------------------------------------------------
@@ -357,7 +369,7 @@ def save_differences(differences):
 # 3. Ask
 # 4. Bid
 #
-# これにより last_price が空欄でも
+# last_price が空欄でも
 # 概算取引金額を計算できるケースを増やす
 # ============================================================
 
@@ -1084,8 +1096,8 @@ def calculate_differences(
         # ----------------------------------------------------
         # Estimated trade value
         #
-        # OI減少でもvolume_diffがプラスなら
-        # その取引量を使用する
+        # OI減少でも volume_diff がプラスなら
+        # その取引量を使用
         # ----------------------------------------------------
 
         estimated_trade_value = (
@@ -1118,6 +1130,7 @@ def calculate_differences(
         alerts = []
 
 
+        # 大きな出来高
         if volume_diff >= VOLUME_THRESHOLD:
 
             alerts.append(
@@ -1125,6 +1138,7 @@ def calculate_differences(
             )
 
 
+        # 大きなOI増加
         if oi_diff >= OI_INCREASE_THRESHOLD:
 
             alerts.append(
@@ -1132,6 +1146,7 @@ def calculate_differences(
             )
 
 
+        # 大きなOI減少
         if oi_diff <= -OI_DECREASE_THRESHOLD:
 
             alerts.append(
@@ -1139,6 +1154,7 @@ def calculate_differences(
             )
 
 
+        # 大きな価格変化
         if abs(price_diff) >= PRICE_CHANGE_THRESHOLD:
 
             alerts.append(
@@ -1146,6 +1162,7 @@ def calculate_differences(
             )
 
 
+        # 大きなIV変化
         if abs(iv_diff) >= IV_CHANGE_THRESHOLD:
 
             alerts.append(
@@ -1153,6 +1170,7 @@ def calculate_differences(
             )
 
 
+        # POSITION
         if (
             volume_diff > 0
             and oi_diff != 0
@@ -1484,7 +1502,7 @@ def build_discord_message(
         )
 
 
-        # 価格の根拠も表示
+        # 推定価格の場合は根拠を表示
         if price_source != "Last Price":
 
             message.append(
@@ -1762,7 +1780,15 @@ def send_discord_message(
 # ============================================================
 # Alert candidates
 #
-# ここで「概算取引金額100万円以上」のフィルターを行う
+# 通知条件：
+#
+# ① 概算取引金額 >= 100万円
+#
+# OR
+#
+# ② OI変化 >= +20枚
+#    または
+#    OI変化 <= -20枚
 # ============================================================
 
 def get_alert_candidates(
@@ -1780,6 +1806,10 @@ def get_alert_candidates(
         )
 
 
+        # ----------------------------------------------------
+        # まず何らかの変化があること
+        # ----------------------------------------------------
+
         if not alert_type:
 
             continue
@@ -1792,16 +1822,46 @@ def get_alert_candidates(
         )
 
 
-        # ----------------------------------------------------
-        # 最重要条件
-        #
-        # 概算取引金額が100万円未満なら
-        # Discord通知しない
-        # ----------------------------------------------------
+        oi_diff = number(
+            row.get(
+                "open_interest_diff"
+            )
+        )
 
-        if (
+
+        # ====================================================
+        # 通知条件①
+        # 概算取引金額
+        # ====================================================
+
+        trade_value_condition = (
             estimated_trade_value
-            < MIN_ESTIMATED_TRADE_VALUE
+            >= MIN_ESTIMATED_TRADE_VALUE
+        )
+
+
+        # ====================================================
+        # 通知条件②
+        # OI変化
+        # ====================================================
+
+        oi_change_condition = (
+            oi_diff >= MIN_OI_CHANGE
+            or
+            oi_diff <= -MIN_OI_CHANGE
+        )
+
+
+        # ====================================================
+        # OR条件
+        #
+        # どちらか一方を満たせば通知
+        # ====================================================
+
+        if not (
+            trade_value_condition
+            or
+            oi_change_condition
         ):
 
             continue
@@ -1871,6 +1931,10 @@ def get_alert_candidates(
         )
 
 
+        # ----------------------------------------------------
+        # 出来高
+        # ----------------------------------------------------
+
         score += abs(
             number(
                 row.get(
@@ -1879,6 +1943,10 @@ def get_alert_candidates(
             )
         )
 
+
+        # ----------------------------------------------------
+        # OI
+        # ----------------------------------------------------
 
         score += abs(
             number(
@@ -2142,6 +2210,13 @@ def main():
     )
 
 
+    print(
+        f"[SETTING] "
+        f"Minimum OI change: "
+        f"+/-{MIN_OI_CHANGE} contracts"
+    )
+
+
     # --------------------------------------------------------
     # Current
     # --------------------------------------------------------
@@ -2293,7 +2368,9 @@ def main():
 
     print(
         f"Alert candidates "
-        f"(>= {format_money(MIN_ESTIMATED_TRADE_VALUE)}): "
+        f"(trade value >= "
+        f"{format_money(MIN_ESTIMATED_TRADE_VALUE)} "
+        f"OR OI +/-{MIN_OI_CHANGE}): "
         f"{len(candidates)}"
     )
 
@@ -2316,3 +2393,4 @@ def main():
 if __name__ == "__main__":
 
     main()
+```
