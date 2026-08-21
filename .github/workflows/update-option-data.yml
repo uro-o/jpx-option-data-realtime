@@ -1,11 +1,22 @@
+```yaml
 name: Update JPX Option Data
 
 on:
 
+  # 手動実行
   workflow_dispatch:
 
+  # ======================================================
+  # 5分間隔で実行
+  #
+  # 毎時00分を避けることで、GitHub Actionsの混雑による
+  # スケジュール遅延をできるだけ避ける
+  #
+  # 02, 07, 12, 17, ... , 57分
+  # 月～金
+  # ======================================================
   schedule:
-    - cron: "* * * * 1-5"
+    - cron: "2-57/5 * * * 1-5"
 
 
 permissions:
@@ -56,7 +67,7 @@ jobs:
 
 
       # ======================================================
-      # Get JPX data
+      # Get JPX option data
       # ======================================================
 
       - name: Get JPX option data
@@ -65,6 +76,14 @@ jobs:
           echo "========================================"
           echo "GET JPX OPTION DATA"
           echo "========================================"
+
+          echo "UTC:"
+          date -u
+
+          echo "JST:"
+          TZ=Asia/Tokyo date
+
+          echo ""
 
           python get_option_data.py
 
@@ -83,6 +102,14 @@ jobs:
           echo "========================================"
           echo "CALCULATE DIFFERENCES"
           echo "========================================"
+
+          echo "UTC:"
+          date -u
+
+          echo "JST:"
+          TZ=Asia/Tokyo date
+
+          echo ""
 
           python calculate_difference.py
 
@@ -120,16 +147,13 @@ jobs:
           echo "COMMIT AND PUSH"
           echo "========================================"
 
-
           git config user.name \
             "github-actions[bot]"
 
           git config user.email \
             "41898282+github-actions[bot]@users.noreply.github.com"
 
-
           git add data/
-
 
           if git diff --cached --quiet; then
 
@@ -149,7 +173,6 @@ jobs:
 
             git commit \
               -m "Update JPX option data"
-
 
             echo ""
             echo "Pushing to main..."
@@ -176,8 +199,13 @@ jobs:
           echo "JPX OPTION DATA UPDATE FINISHED"
           echo "========================================"
 
-          echo "Time:"
-          date
+          echo "UTC:"
+          date -u
+
+          echo ""
+
+          echo "JST:"
+          TZ=Asia/Tokyo date
 
           echo ""
 
@@ -190,3 +218,4 @@ jobs:
           echo "${GITHUB_REF_NAME}"
 
           echo "========================================"
+```
