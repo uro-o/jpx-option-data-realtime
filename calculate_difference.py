@@ -1086,8 +1086,8 @@ def build_discord_message(
         ""
     )
 
-    qri_update_time = difference.get(
-        "qri_update_time",
+    trade_time = difference.get(
+        "trade_time",
         ""
     )
 
