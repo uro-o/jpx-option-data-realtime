@@ -65,7 +65,7 @@ jobs:
 
 
       # ======================================================
-      # Get JPX data
+      # Get JPX option data
       # ======================================================
 
       - name: Get JPX option data
@@ -85,7 +85,17 @@ jobs:
       - name: Calculate differences and send Discord
         env:
 
-          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          # --------------------------------------------------
+          # Discord Webhooks
+          # --------------------------------------------------
+
+          DISCORD_WEBHOOK_BIG: ${{ secrets.DISCORD_WEBHOOK_BIG }}
+
+          DISCORD_WEBHOOK_MEDIUM: ${{ secrets.DISCORD_WEBHOOK_MEDIUM }}
+
+          DISCORD_WEBHOOK_OI: ${{ secrets.DISCORD_WEBHOOK_OI }}
+
+          DISCORD_WEBHOOK_OTHER: ${{ secrets.DISCORD_WEBHOOK_OTHER }}
 
         run: |
 
