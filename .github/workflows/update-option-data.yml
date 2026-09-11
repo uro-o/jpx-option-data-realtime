@@ -1,279 +1,130 @@
 name: Update JPX Option Data
 
 on:
-
   workflow_dispatch:
-
   schedule:
     - cron: "*/5 * * * 1-5"
-
-
-# ============================================================
-# 同じWorkflowを同時実行させない
-# ============================================================
 
 concurrency:
   group: jpx-option-data
   cancel-in-progress: false
 
-
 permissions:
   contents: write
 
-
 jobs:
-
   update-option-data:
-
     runs-on: ubuntu-latest
-
-
     steps:
-
-      # ======================================================
-      # Checkout
-      # ======================================================
-
       - name: Checkout repository
         uses: actions/checkout@v4
-
         with:
           fetch-depth: 0
 
-
-      # ======================================================
-      # Python
-      # ======================================================
-
       - name: Setup Python
         uses: actions/setup-python@v5
-
         with:
           python-version: "3.12"
 
-
-      # ======================================================
-      # Dependencies
-      # ======================================================
-
       - name: Install dependencies
         run: |
-
           python -m pip install --upgrade pip
-
           pip install requests beautifulsoup4
-
-
-      # ======================================================
-      # Get JPX option data
-      # ======================================================
 
       - name: Get JPX option data
         run: |
-
           echo "========================================"
           echo "GET JPX OPTION DATA"
           echo "========================================"
-
           python get_option_data.py
 
-
-      # ======================================================
-      # Calculate differences + Discord
-      # ======================================================
+      # QRIのURL番号ではなく、QRIページの「取引最終日」から
+      # 実際の限月(YYYY-MM)を確定する。
+      - name: Fix contract labels from QRI
+        run: |
+          echo "========================================"
+          echo "FIX CONTRACT LABELS"
+          echo "========================================"
+          python fix_contract_labels.py
 
       - name: Calculate differences and send Discord
         env:
-
-          # --------------------------------------------------
-          # Discord Webhooks
-          # --------------------------------------------------
-
           DISCORD_WEBHOOK_BIG: ${{ secrets.DISCORD_WEBHOOK_BIG }}
-
           DISCORD_WEBHOOK_MEDIUM: ${{ secrets.DISCORD_WEBHOOK_MEDIUM }}
-
           DISCORD_WEBHOOK_OI: ${{ secrets.DISCORD_WEBHOOK_OI }}
-
           DISCORD_WEBHOOK_OTHER: ${{ secrets.DISCORD_WEBHOOK_OTHER }}
-
         run: |
-
           echo "========================================"
           echo "CALCULATE DIFFERENCES"
           echo "========================================"
-
           python calculate_difference.py
-
-
-      # ======================================================
-      # Check files
-      # ======================================================
 
       - name: Check data files
         run: |
-
           echo "========================================"
           echo "DATA FILES"
           echo "========================================"
-
           find data -maxdepth 2 -type f -print | sort
-
           echo ""
-
           echo "========================================"
           echo "GIT STATUS"
           echo "========================================"
-
           git status --short
-
-
-      # ======================================================
-      # Commit and push
-      # ======================================================
 
       - name: Commit and push
         run: |
-
           echo "========================================"
           echo "COMMIT AND PUSH"
           echo "========================================"
 
-
-          git config user.name \
-            "github-actions[bot]"
-
-          git config user.email \
-            "41898282+github-actions[bot]@users.noreply.github.com"
-
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           git add data/
 
-
           if git diff --cached --quiet; then
-
-            echo ""
             echo "No changes to commit."
-            echo ""
-
           else
-
-            echo ""
             echo "Changes detected."
-            echo ""
-
             git status --short
 
-            echo ""
+            git commit -m "Update JPX option data"
 
-
-            git commit \
-              -m "Update JPX option data"
-
-
-            echo ""
             echo "Fetching latest main..."
-            echo ""
-
             git fetch origin main
 
-
-            echo ""
-            echo "Checking remote changes..."
-            echo ""
-
-
-            # ------------------------------------------------
-            # リモートに新しいコミットがある場合
-            #
-            # データファイルは今回取得したものを優先
-            # ------------------------------------------------
-
             if git merge-base --is-ancestor HEAD origin/main; then
-
               echo "Remote is already up to date."
-
             else
-
               echo "Remote has newer commits."
-
               echo "Resetting to remote main..."
-
               git reset --soft origin/main
-
-              echo ""
-
-              echo "Restaging data..."
-
               git add data/
 
-
               if git diff --cached --quiet; then
-
-                echo ""
                 echo "No local data changes after sync."
-                echo ""
-
               else
-
-                echo ""
-                echo "Creating combined commit..."
-
-                git commit \
-                  -m "Update JPX option data"
-
+                git commit -m "Update JPX option data"
               fi
-
             fi
 
-
-            echo ""
             echo "Pushing to main..."
-            echo ""
-
             git push origin HEAD:main
-
-
-            echo ""
             echo "Push completed."
-            echo ""
-
           fi
-
-
-      # ======================================================
-      # Finish
-      # ======================================================
 
       - name: Finished
         run: |
-
           echo ""
-
           echo "========================================"
-
           echo "JPX OPTION DATA UPDATE FINISHED"
-
           echo "========================================"
-
-          echo ""
-
           echo "Time:"
-
           date
-
           echo ""
-
           echo "Repository:"
-
           echo "${GITHUB_REPOSITORY}"
-
           echo ""
-
           echo "Branch:"
-
           echo "${GITHUB_REF_NAME}"
-
-          echo ""
-
           echo "========================================"
