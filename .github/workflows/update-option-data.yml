@@ -38,14 +38,19 @@ jobs:
           echo "========================================"
           python get_option_data.py
 
-      # QRIのURL番号ではなく、QRIページの「取引最終日」から
-      # 実際の限月(YYYY-MM)を確定する。
       - name: Fix contract labels from QRI
         run: |
           echo "========================================"
           echo "FIX CONTRACT LABELS"
           echo "========================================"
           python fix_contract_labels.py
+
+      - name: Sort data by trade time
+        run: |
+          echo "========================================"
+          echo "SORT BY TRADE TIME"
+          echo "========================================"
+          python sort_latest_by_trade_time.py
 
       - name: Calculate differences and send Discord
         env:
