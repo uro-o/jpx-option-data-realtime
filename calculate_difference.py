@@ -192,6 +192,31 @@ def number(value):
 
 
 # ============================================================
+# OI validity
+#
+# QRI may temporarily display OI as "-" while OI is being updated.
+# Such values must not be treated as zero.
+# ============================================================
+
+def valid_open_interest(value):
+
+    if value is None:
+        return False
+
+    text = str(value).strip()
+
+    if text in ("", "-", "--", "—"):
+        return False
+
+    try:
+        float(text.replace(",", "").strip())
+        return True
+
+    except Exception:
+        return False
+
+
+# ============================================================
 # Valid positive number
 # ============================================================
 
@@ -447,7 +472,6 @@ def determine_execution_side(
     bid_price,
     ask_price,
 ):
-
     last_price = number(last_price)
     bid_price = number(bid_price)
     ask_price = number(ask_price)
@@ -797,19 +821,40 @@ def calculate_differences(
 
 
         # OI
+        #
+        # QRI can temporarily show "-" during an OI update.
+        # Do NOT convert that temporary state to zero.
+        # Keep the previous valid OI as the baseline and suppress
+        # OI-change alerts until a valid OI value is available again.
 
-        previous_oi = number(
-            previous.get("open_interest")
+        previous_oi_raw = previous.get("open_interest", "")
+        current_oi_raw = current.get("open_interest", "")
+
+        previous_oi_valid = valid_open_interest(
+            previous_oi_raw
         )
 
-        current_oi = number(
-            current.get("open_interest")
+        current_oi_valid = valid_open_interest(
+            current_oi_raw
         )
 
-        oi_diff = (
-            current_oi -
-            previous_oi
-        )
+        if previous_oi_valid:
+            previous_oi = number(previous_oi_raw)
+        else:
+            previous_oi = 0.0
+
+        if current_oi_valid:
+            current_oi = number(current_oi_raw)
+        else:
+            current_oi = previous_oi
+
+        if not current_oi_valid or not previous_oi_valid:
+            oi_diff = 0.0
+        else:
+            oi_diff = (
+                current_oi -
+                previous_oi
+            )
 
 
         # Volume
@@ -898,7 +943,6 @@ def calculate_differences(
         current_bid_qty = number(
             current.get("bid_quantity")
         )
-
 
         ask_qty_diff = (
             current_ask_qty -
@@ -1348,7 +1392,6 @@ def build_discord_message(
     # ========================================================
     # Message
     # ========================================================
-
     message = []
 
 
@@ -1797,8 +1840,7 @@ def send_discord_message(
 
     except requests.exceptions.RequestException as e:
 
-        print(
-            "[DISCORD] ERROR: "
+        print(            "[DISCORD] ERROR: "
             f"RequestException: {e}"
         )
 
@@ -2227,7 +2269,8 @@ def send_alerts(
 # ============================================================
 
 def save_previous(
-    current_records
+    current_records,
+    previous_records=None,
 ):
 
     DATA_DIR.mkdir(
@@ -2261,8 +2304,67 @@ def save_previous(
 
         writer.writeheader()
 
+        # ----------------------------------------------------
+        # Preserve the last valid OI
+        # ----------------------------------------------------
+        #
+        # If QRI temporarily shows "-", do not write "-" into
+        # previous.csv. Keep the previous valid OI so that when
+        # QRI returns to a numeric value we compare against the
+        # last valid baseline instead of zero.
+
+        previous_oi_map = {}
+
+        if previous_records:
+            for row in previous_records:
+                key = (
+                    row.get("contract", ""),
+                    row.get("option_type", ""),
+                    row.get("strike", ""),
+                )
+
+                oi_value = row.get(
+                    "open_interest",
+                    "",
+                )
+
+                if valid_open_interest(oi_value):
+                    previous_oi_map[key] = oi_value
+
+        records_to_save = []
+
+        for row in current_records:
+            saved_row = dict(row)
+
+            key = (
+                row.get("contract", ""),
+                row.get("option_type", ""),
+                row.get("strike", ""),
+            )
+
+            current_oi = row.get(
+                "open_interest",
+                "",
+            )
+
+            if (
+                not valid_open_interest(current_oi)
+                and key in previous_oi_map
+            ):
+                saved_row["open_interest"] = previous_oi_map[key]
+
+                print(
+                    "[OI UPDATE WAIT] "
+                    f"{row.get('contract', '')} "
+                    f"{row.get('option_type', '')} "
+                    f"{row.get('strike', '')}: "
+                    "preserving previous valid OI"
+                )
+
+            records_to_save.append(saved_row)
+
         writer.writerows(
-            current_records
+            records_to_save
         )
 
 
@@ -2397,12 +2499,12 @@ def main():
 
         print(
             "[INFO] "
-            "Creating previous.csv."
-        )
+            "Creating previous.csv."        )
 
 
         save_previous(
-            current_records
+            current_records,
+            previous_records,
         )
 
 
@@ -2463,7 +2565,8 @@ def main():
     # ========================================================
 
     save_previous(
-        current_records
+        current_records,
+        previous_records,
     )
 
 
