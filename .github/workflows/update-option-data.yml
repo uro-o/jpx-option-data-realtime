@@ -62,7 +62,7 @@ jobs:
           echo "========================================"
           echo "CALCULATE DIFFERENCES"
           echo "========================================"
-          python calculate_difference.py
+          python run_calculate_difference_sorted.py
 
       - name: Check data files
         run: |
