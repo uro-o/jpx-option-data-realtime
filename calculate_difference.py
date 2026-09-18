@@ -1877,6 +1877,14 @@ def send_discord_message(
 #    OI変化 <= -20
 # ============================================================
 
+def get_alert_candidates(
+    differences
+):
+
+    candidates = []
+
+
+    for row in differences:
 
         alert_type = row.get(
             "alert_type",
