@@ -1507,7 +1507,7 @@ def build_discord_message(
     message.append(
         f"📊 建玉："
         f"**{fmt_signed(oi_diff)}枚** "
-        f"（現在 **{fmt(current_open_interest)}枚**）
+        f"（現在 **{fmt(current_open_interest)}枚**）"
     )
 
 
@@ -1898,11 +1898,3 @@ def get_alert_candidates(
 
 
         estimated_trade_value = number(
-            row.get(
-                "estimated_trade_value"
-            )
-        )
-
-
-        oi_diff = number(
-            row.get(
